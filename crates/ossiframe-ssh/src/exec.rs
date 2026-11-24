@@ -1,30 +1,24 @@
-use crate::connect::HostKeyHandler;
+use crate::connect::{CLEANUP_TIMEOUT, HostKeyHandler, close_handle};
 use async_trait::async_trait;
 use ossiframe_core::redact::{BoundedBuffer, OUTPUT_CAP};
-use ossiframe_core::{
-    CancelToken, CommandSpec, ExecError, ExecResult, Executor, ExitStatus, SecretString,
-};
+use ossiframe_core::{CancelToken, CommandSpec, ExecError, ExecResult, Executor, ExitStatus};
 use russh::client::{Handle, Msg};
 use russh::{Channel, ChannelMsg};
 
 /// Runs commands over an authenticated SSH connection.
+///
+/// Authentication secrets are not kept here: they are dropped after login
+/// and are never part of a command, so they are not registered for output
+/// redaction. Output still goes through bounded capture and whole-output
+/// redaction; command-scoped secrets (sent over stdin) arrive with
+/// privileged execution in a later spec.
 pub struct SshExecutor {
     handle: Handle<HostKeyHandler>,
-    redact: Vec<SecretString>,
 }
 
 impl SshExecutor {
     pub(crate) fn new(handle: Handle<HostKeyHandler>) -> Self {
-        Self {
-            handle,
-            redact: Vec::new(),
-        }
-    }
-
-    /// Registers values that must be replaced in command output.
-    pub fn with_redactions(mut self, secrets: Vec<SecretString>) -> Self {
-        self.redact = secrets;
-        self
+        Self { handle }
     }
 
     /// True when the underlying connection has closed (for example after
@@ -33,11 +27,9 @@ impl SshExecutor {
         self.handle.is_closed()
     }
 
+    /// Sends a disconnect, waiting at most a short, fixed time.
     pub async fn disconnect(&self) {
-        let _ = self
-            .handle
-            .disconnect(russh::Disconnect::ByApplication, "", "en")
-            .await;
+        close_handle(&self.handle).await;
     }
 }
 
@@ -71,6 +63,22 @@ async fn collect(
     c
 }
 
+/// Opens the channel, submits the command and collects output. The channel
+/// is stored in `slot` as soon as it exists, so the caller can close it if
+/// this future is abandoned on timeout or cancel.
+async fn exchange(
+    handle: &Handle<HostKeyHandler>,
+    command: String,
+    slot: &mut Option<Channel<Msg>>,
+    out: &mut BoundedBuffer,
+    err: &mut BoundedBuffer,
+) -> Result<Collected, russh::Error> {
+    let ch = slot.insert(handle.channel_open_session().await?);
+    ch.exec(true, command).await?;
+    let _ = ch.eof().await;
+    Ok(collect(ch, out, err).await)
+}
+
 /// How a channel that stopped producing messages should be reported.
 pub(crate) fn end_state(
     exit: Option<ExitStatus>,
@@ -84,53 +92,55 @@ pub(crate) fn end_state(
 }
 
 enum Outcome {
-    Done(Collected),
+    Done(Result<Collected, russh::Error>),
     Timeout,
     Cancelled,
 }
 
 #[async_trait]
 impl Executor for SshExecutor {
+    /// The timeout and the cancel token cover the whole operation: channel
+    /// creation, command submission, output and exit status. A timeout or
+    /// cancel does not mean the remote process stopped.
     async fn run(&self, spec: &CommandSpec, cancel: &CancelToken) -> Result<ExecResult, ExecError> {
         if self.handle.is_closed() {
             return Err(ExecError::ConnectionLost);
         }
-        let lost = |e: russh::Error| {
-            if self.handle.is_closed() {
-                ExecError::ConnectionLost
-            } else {
-                ExecError::Channel(e.to_string())
-            }
-        };
-        let mut ch = self.handle.channel_open_session().await.map_err(lost)?;
-        ch.exec(true, spec.to_command_line()).await.map_err(lost)?;
-        let _ = ch.eof().await;
-
+        let deadline = tokio::time::Instant::now() + spec.timeout();
+        let mut slot: Option<Channel<Msg>> = None;
         let mut out = BoundedBuffer::new(OUTPUT_CAP);
         let mut err = BoundedBuffer::new(OUTPUT_CAP);
+
         let outcome = tokio::select! {
-            c = collect(&mut ch, &mut out, &mut err) => Outcome::Done(c),
-            _ = tokio::time::sleep(spec.timeout()) => Outcome::Timeout,
+            biased;
             _ = cancel.cancelled() => Outcome::Cancelled,
+            _ = tokio::time::sleep_until(deadline) => Outcome::Timeout,
+            r = exchange(&self.handle, spec.to_command_line(), &mut slot, &mut out, &mut err) => Outcome::Done(r),
         };
+
         let collected = match outcome {
-            Outcome::Done(c) => c,
-            // Best effort. Closing the channel does not prove the remote
-            // process stopped.
-            Outcome::Timeout => {
-                let _ = ch.close().await;
-                return Err(ExecError::Timeout);
-            }
-            Outcome::Cancelled => {
-                let _ = ch.close().await;
-                return Err(ExecError::Cancelled);
+            Outcome::Done(Ok(c)) => c,
+            other => {
+                // Best effort and bounded. Closing the channel does not prove
+                // the remote process stopped.
+                if let Some(ch) = slot.take() {
+                    let _ = tokio::time::timeout(CLEANUP_TIMEOUT, ch.close()).await;
+                }
+                return Err(match other {
+                    Outcome::Timeout => ExecError::Timeout,
+                    Outcome::Cancelled => ExecError::Cancelled,
+                    Outcome::Done(Err(_)) if self.handle.is_closed() => ExecError::ConnectionLost,
+                    Outcome::Done(Err(e)) => {
+                        ExecError::Channel(e.to_string().chars().take(200).collect())
+                    }
+                    Outcome::Done(Ok(_)) => unreachable!("handled above"),
+                });
             }
         };
 
         let exit = end_state(collected.exit, self.handle.is_closed())?;
-        let secrets: Vec<&str> = self.redact.iter().map(SecretString::expose).collect();
-        let (stdout, t1) = out.finalize(&secrets);
-        let (stderr, t2) = err.finalize(&secrets);
+        let (stdout, t1) = out.finalize(&[]);
+        let (stderr, t2) = err.finalize(&[]);
         Ok(ExecResult {
             exit,
             stdout,
