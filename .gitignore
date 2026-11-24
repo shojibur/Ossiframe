@@ -1,0 +1,51 @@
+# .kiro/ holds project steering, specs and hooks. Never ignore it or its subfolders.
+
+# Rust
+/target/
+**/target/
+
+# Node / frontend
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
+.pnpm-store/
+
+# Tauri generated
+**/src-tauri/gen/schemas/
+
+# Secrets and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ecdsa*
+id_ed25519*
+!*.pub
+known_hosts
+*.kdbx
+secrets.*
+credentials.*
+
+# Local databases
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Logs and local state
+*.log
+.ossiframe-local/
+
+# OS and editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
