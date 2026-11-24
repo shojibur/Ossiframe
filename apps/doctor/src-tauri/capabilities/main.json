@@ -13,7 +13,8 @@
     "allow-disconnect-server",
     "allow-trust-host-key",
     "allow-replace-host-key",
-    "allow-get-server-info",
-    "allow-cancel-operation"
+    "allow-cancel-operation",
+    "allow-run-operation",
+    "allow-list-modules"
   ]
 }

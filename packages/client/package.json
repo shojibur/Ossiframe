@@ -17,6 +17,11 @@
     "@tauri-apps/api": "^2.12.5"
   },
   "devDependencies": {
+    "@types/react": "^19.3.0",
+    "react": "^19.3.1",
     "typescript": "^6.0.3"
+  },
+  "peerDependencies": {
+    "react": ">=19"
   }
 }

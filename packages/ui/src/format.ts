@@ -63,6 +63,8 @@ export function errorMessage(e: IpcError): string {
       return "The typed host name does not match.";
     case "protocol":
       return `SSH error: ${e.message}`;
+    case "operationFailed":
+      return `The operation failed: ${e.message}`;
     case "internal":
       return "Something went wrong.";
   }

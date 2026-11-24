@@ -196,6 +196,10 @@ pub enum IpcError {
     ConfirmationMismatch,
     #[error("SSH protocol error: {message}")]
     Protocol { message: String },
+    /// A module operation failed. The message is short and never contains
+    /// raw command output.
+    #[error("operation failed: {message}")]
+    OperationFailed { message: String },
     #[error("internal error")]
     Internal,
 }
@@ -338,6 +342,17 @@ mod tests {
         assert_eq!(
             IpcError::from(ServiceError::Connect(ConnectError::AuthFailed)),
             IpcError::AuthFailed
+        );
+    }
+
+    #[test]
+    fn operation_failed_serializes_with_kind() {
+        assert_eq!(
+            serde_json::to_value(IpcError::OperationFailed {
+                message: "result too large".into()
+            })
+            .unwrap(),
+            serde_json::json!({"kind": "operationFailed", "message": "result too large"})
         );
     }
 

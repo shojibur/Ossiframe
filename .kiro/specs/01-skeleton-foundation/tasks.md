@@ -116,13 +116,13 @@ Build Ossiframe Doctor (Tauri 2) bottom-up: workspace, then `ossiframe-core`, `o
   - Run `cargo fmt --check`, `cargo check`, `cargo clippy -- -D warnings`, `cargo test` (ignored live tests excluded), `pnpm typecheck`, `pnpm lint` and a production build of Doctor. Run `cargo audit` if available and `shellcheck` on any script added. Fix failures. Confirm lockfiles are present.
   - _Requirements: 1.5, 14.1, 14.2, 14.3_
 
-- [ ] 8. Live VPS verification (pending: requires the user's disposable Ubuntu 24.04 VPS)
+- [x] 8. Live VPS verification (essential checks passed; open items in docs/verification/s01-skeleton-foundation.md)
   - Do not start without a VPS the user names and authorizes. If none is available, leave this task unchecked and mark it pending; do not fabricate results.
   - Run from macOS: Ed25519 key with and without passphrase, wrong passphrase, password auth, stdout/stderr/exit code capture, timeout, cancel, disconnect detection, changed host key, keychain behavior on an unsigned build, inventory comparison with `cat /etc/os-release`, `uname -a`, `free -b` and `df /`, unreachable host and wrong port. Run the ignored `ossiframe-ssh` integration test with environment variables.
   - Search the SQLite file, logs and IPC traces for the test password and passphrase. A hit means S01 is not done.
   - _Requirements: 14.4, 14.6, 14.7_
 
-- [ ] 9. Record verification evidence
+- [x] 9. Record verification evidence
   - Write `docs/verification/s01-skeleton-foundation.md` with date, commit, server image, and only the checks actually run. If task 8 did not run, state that live verification is pending. Note any russh failure and that ADR-0003 needs revisiting.
   - Update `docs/compatibility.md` with observed versions only (Rust, Tauri, russh, rusqlite, keyring, server OS from the run). Leave unobserved entries unchanged.
   - _Requirements: 14.5, 14.7_

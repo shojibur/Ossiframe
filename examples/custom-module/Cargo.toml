@@ -1,0 +1,17 @@
+[package]
+name = "ossiframe-mod-ports-example"
+description = "Ossiframe example module: read-only listing of listening TCP sockets"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+async-trait = "0.1.92"
+ossiframe-core = { version = "0.1.0", path = "../../crates/ossiframe-core" }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+
+[dev-dependencies]
+tokio = { version = "1.54.1", features = ["rt", "macros"] }

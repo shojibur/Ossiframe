@@ -1,0 +1,486 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "1.1 Build Doctor with commands defined in `ossiframe-desktop`": [
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795540825776
+      },
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795540838980
+      },
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795540979912
+      }
+    ],
+    "1.2 Record the spike result and chosen path": [
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795540825858
+      },
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795540980464
+      },
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795541016826
+      }
+    ],
+    "2.1 Add identifiers and the `Module` contract to `ossiframe-core`": [
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795540825910
+      },
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795541017447
+      },
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795541115077
+      }
+    ],
+    "2.2 Implement `RegistryBuilder`, `Registry` and the shared resolver": [
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795540825953
+      },
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795541115846
+      },
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795541231543
+      }
+    ],
+    "3.1 Implement the dispatcher in `ossiframe-desktop` (no Tauri dependency)": [
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795540826007
+      },
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795541238648
+      },
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795541399055
+      }
+    ],
+    "4.1 Create `modules/linux-inventory` and move the inventory code": [
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795540826051
+      },
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795541239014
+      },
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795541399189
+      }
+    ],
+    "4.2 Implement `LinuxInventory` as a `Module`": [
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795540826085
+      },
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795541406663
+      },
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795541494772
+      }
+    ],
+    "5.1 Move the nine S01 commands and `TauriEvents` into `tauri_support`": [
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795540826154
+      },
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795541495556
+      },
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795541647055
+      }
+    ],
+    "5.2 Add `run_operation`, `list_modules` and `setup`": [
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795540826187
+      },
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795541647812
+      },
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795541784703
+      }
+    ],
+    "6.1 Rewire Doctor's Rust side": [
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795540826218
+      },
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795541785320
+      },
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795541915011
+      }
+    ],
+    "6.2 Update the client API and Doctor's Overview call": [
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795540826250
+      },
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795541915749
+      },
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795542006122
+      }
+    ],
+    "6.3 Rebuild Doctor and recheck against the Lightsail server (manual, needs the user)": [
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795540826282
+      },
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795542006308
+      },
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795542078700
+      }
+    ],
+    "7.1 Add `useServerConnections` to `@ossiframe/client`": [
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795540826313
+      },
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795542079465
+      },
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795542212423
+      }
+    ],
+    "7.2 Move dialogs, formatters and `ServerWorkspace` into `@ossiframe/ui`": [
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795540826348
+      },
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795542213375
+      },
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795542355133
+      }
+    ],
+    "7.3 Add the `linux-inventory` optional UI folder and shrink Doctor's `App.tsx`": [
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795540826381
+      },
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795542355626
+      },
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795542522174
+      }
+    ],
+    "8.1 Create the starter app files": [
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795540826415
+      },
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795542530536
+      },
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795543034975
+      }
+    ],
+    "8.2 Add the starter steering, skill and README": [
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795540826450
+      },
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795543035077
+      },
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795543147573
+      }
+    ],
+    "9.1 Create the `ossiframe-mod-ports-example` crate": [
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795540826486
+      },
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795543035118
+      },
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795543148500
+      }
+    ],
+    "9.2 Create the optional `ports` page": [
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795540826520
+      },
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795543156575
+      },
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795543316927
+      }
+    ],
+    "10.1 Create the crate with argument parsing and input validation": [
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795540826560
+      },
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795543157306
+      },
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795543317244
+      }
+    ],
+    "10.2 Add module resolution, rev pinning and token rendering": [
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795540826597
+      },
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795543325408
+      },
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795543713604
+      }
+    ],
+    "10.3 Render, vendor and finalize the generated app": [
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795540826668
+      },
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795543714035
+      }
+    ],
+    "11. Developer quick-start": [
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795540826696
+      }
+    ],
+    "12. Consolidated quality gate": [
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795540826725
+      }
+    ],
+    "13.1 Generate and build a minimal app and an app with modules": [
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795540826756
+      }
+    ],
+    "13.2 Run both generated apps against the Lightsail server (manual, needs the user)": [
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795540826792
+      }
+    ],
+    "14.1 Stop and request user approval to publish the commit": [
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795540826830
+      }
+    ],
+    "14.2 Generate and build outside the repository from the Published_Rev": [
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795540826865
+      }
+    ],
+    "15. Record evidence and confirm completion": [
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795540826904
+      }
+    ],
+    "1. Spike: cross-crate `generate_handler!` with the installed Tauri 2.12": [
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795541016880
+      }
+    ],
+    "2. Core module contract and registry": [
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795541231614
+      }
+    ],
+    "3. Generic `run_operation` dispatch": [
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795541399103
+      }
+    ],
+    "4. Extract the `linux-inventory` module": [
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795541494856
+      }
+    ],
+    "5. Shared Tauri commands and setup in `ossiframe-desktop` (feature `tauri`)": [
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795541784759
+      }
+    ],
+    "6. Migrate Doctor to the registry and shared plumbing": [
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795542078766
+      }
+    ],
+    "7. Move the shared React connection UI into packages": [
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795542522218
+      }
+    ],
+    "8. Starter template": [
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795543147656
+      }
+    ],
+    "9. Custom `ports` example module": [
+      {
+        "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795543316967
+      }
+    ]
+  }
+}

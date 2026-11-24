@@ -1,6 +1,6 @@
 # S01 Verification
 
-Status: **live transport checks passed; desktop app checks in progress.**
+Status: **essential live verification passed** (SSH transport, host key pinning, real inventory in the desktop app). Checks still open are listed at the end and are not claimed.
 
 ## Environment (local)
 
@@ -51,7 +51,7 @@ Status: **live transport checks passed; desktop app checks in progress.**
 | ECDSA | `SHA256:HC+LcVMmqeaPJK3fsYlVthcLf42DS42N65IQqUy39vI` |
 | RSA | `SHA256:/yp0cJKD3DS6cmphNQPi4dLi08O7AKbSnTaQv8n7q78` |
 
-Comparison with the Lightsail browser console: pending user confirmation.
+Comparison with the Lightsail browser console: not reported; still open.
 
 ### `cargo test -p ossiframe-ssh --test live -- --ignored` (pass, 4.2 s)
 
@@ -72,22 +72,33 @@ Comparison with the Lightsail browser console: pending user confirmation.
 
 hostname `ip-172-26-3-117`; `Ubuntu 24.04.5 LTS` (VERSION_ID 24.04); kernel `7.0.0-1014-aws`; `x86_64`; `nproc` 2; `Intel(R) Xeon(R) Platinum 8175M CPU @ 2.50GHz`; MemTotal 422132 kB; root fs 19682557952 B total, 2152611840 B used, 17513168896 B available.
 
-## Live checks (pending, need a disposable Ubuntu 24.04 VPS)
+### Desktop app (release build, manual, 2026-11-24)
+
+| Check | Result |
+|---|---|
+| Add server profile, connect to 54.179.76.25 with `~/.ssh/ossiframe.pem` | Pass (user confirmed) |
+| First-connection fingerprint dialog, trust, connect | Pass. Pinned key in local SQLite: `ssh-ed25519 SHA256:qobMUOP//FiL3rW2mD42syTV5iK5BzW0Dw9Rylibswk`, same as ssh-keyscan |
+| Overview shows actual server inventory | Pass (user confirmed) |
+| Local database contents | Profile stores host, port, user and key path only; `secret_ref` is NULL; no private key material in `doctor.sqlite3*` (`strings` search) |
+| App log files | None created (no `~/Library/Logs/dev.ossiframe.doctor`) |
+
+## Live checks still open
 
 Run `OSSIFRAME_TEST_HOST=… OSSIFRAME_TEST_USER=… OSSIFRAME_TEST_KEY=… cargo test -p ossiframe-ssh --test live -- --ignored --nocapture`, then the manual UI checks:
 
 - [x] Unknown host key aborts before authentication (server log, see above)
 - [x] Wrong pin is rejected; correct pin connects
-- [ ] Ed25519 key without passphrase; with passphrase (prompt shown); wrong passphrase
-- [ ] Password authentication, with and without saving to the keychain
+- [x] Unencrypted private key authentication (RSA, traditional PEM)
+- [ ] Encrypted private key: passphrase prompt, wrong passphrase, saved passphrase
+- [ ] Password authentication: implemented, **not verified** (password login is disabled on the public Lightsail server and will not be enabled)
 - [ ] Reconnect after app restart with a saved secret; prompt when nothing is saved
 - [x] Exit code and stderr of a failing command
 - [x] Command timeout and cancel; session still usable afterwards
 - [ ] Network drop is detected by russh keepalive and shown as disconnected
 - [ ] Changed host key blocks connection; replacement needs the typed host name
-- [ ] Inventory values match `cat /etc/os-release`, `uname -a`, `nproc`, `free -b`, `df -B1 /`
+- [x] Inventory shown in the app (user confirmed against the server); field-by-field comparison with the reference values above not recorded
 - [ ] Unreachable host and wrong port errors
 - [ ] Editing host or port deletes the saved secret and requires new host key verification
-- [ ] Test password and passphrase not present in the SQLite file or app logs
+- [ ] Test passphrase not present in the SQLite file or app logs (no passphrase used yet; key material check passed, see above)
 - [ ] Keychain behavior with the unsigned build (prompts, locked keychain)
 - [ ] Idle memory of the running app

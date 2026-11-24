@@ -64,6 +64,7 @@ export type IpcError =
   | { kind: "alreadyPinned" }
   | { kind: "confirmationMismatch" }
   | { kind: "protocol"; message: string }
+  | { kind: "operationFailed"; message: string }
   | { kind: "internal" };
 
 export interface OsInfo {
@@ -97,4 +98,18 @@ export interface ServerInfo {
   memoryAvailableKb: number | null;
   rootFs: DiskInfo | null;
   probeErrors: ProbeError[];
+}
+
+export interface OperationInfo {
+  id: string;
+  description: string;
+}
+
+export interface ModuleInfo {
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+  dependencies: string[];
+  operations: OperationInfo[];
 }

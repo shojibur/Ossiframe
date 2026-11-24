@@ -3,7 +3,7 @@
 //! This module depends only on `ossiframe-core`, so it can later move into a
 //! reusable `linux-inventory` module unchanged.
 
-pub mod parse;
+use crate::parse;
 
 use ossiframe_core::{CancelToken, CommandSpec, ExecError, Executor};
 use serde::Serialize;

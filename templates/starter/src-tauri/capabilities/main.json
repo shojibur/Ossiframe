@@ -1,0 +1,20 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main",
+  "description": "{{product_name}} main window. Core events plus the app's typed commands only. No fs, shell, http, opener or dialog plugins.",
+  "windows": ["main"],
+  "permissions": [
+    "core:event:default",
+    "allow-list-servers",
+    "allow-add-server",
+    "allow-update-server",
+    "allow-remove-server",
+    "allow-connect-server",
+    "allow-disconnect-server",
+    "allow-trust-host-key",
+    "allow-replace-host-key",
+    "allow-cancel-operation",
+    "allow-run-operation",
+    "allow-list-modules"
+  ]
+}

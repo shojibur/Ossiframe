@@ -1,0 +1,17 @@
+# .kiro/ holds project guidance and specs. Never ignore it.
+/src-tauri/target/
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
+src-tauri/gen/schemas/
+# Secrets and local data
+.env
+.env.*
+*.pem
+*.key
+*.sqlite
+*.sqlite3
+*.db
+*.log
+.DS_Store

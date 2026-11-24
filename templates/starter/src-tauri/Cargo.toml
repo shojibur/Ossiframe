@@ -1,0 +1,28 @@
+[package]
+name = "{{package_name}}"
+description = "{{product_name}}"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+name = "{{lib_name}}_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# Generator insertion point: the ossiframe-core and ossiframe-desktop lines.
+# Standalone: git dependencies on one exact public rev. Local: plain path dependencies.
+{{ossiframe_deps}}
+# Generator insertion point: one dependency line per selected module.
+{{module_deps}}
+tauri = { version = "2", features = [] }
+
+[dev-dependencies]
+serde_json = "1"
+
+# Keeps Cargo from attaching this app to an unrelated parent workspace.
+[workspace]
+

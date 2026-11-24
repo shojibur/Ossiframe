@@ -4,10 +4,13 @@
 //! This crate has no Tauri dependency so that its logic can be reused and
 //! tested on its own. Apps register Tauri commands that call into it.
 
+pub mod dispatch;
 pub mod ipc;
 pub mod service;
 pub mod session;
 pub mod store;
+#[cfg(feature = "tauri")]
+pub mod tauri_support;
 pub mod tokens;
 pub mod vault;
 
