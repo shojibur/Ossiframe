@@ -4,7 +4,7 @@ States: **Planned**, **Implemented** (code targets it), **Verified** (ran it; ev
 
 | Item | Version / arch | State | Evidence or note |
 |---|---|---|---|
-| Desktop: macOS | Apple Silicon (OS version not recorded) | Verified (limited) | Doctor and generated apps (Local_Mode and one Standalone_Mode build) built and, for Local_Mode, ran there. See `docs/verification/s02-modules-and-generator.md`. |
+| Desktop: macOS | Apple Silicon (OS version not recorded) | Verified (limited) | Doctor and generated apps (Local_Mode and Standalone_Mode builds) built and ran there. See `docs/verification/s02-modules-and-generator.md`. |
 | Desktop: macOS | Intel | Planned | |
 | Desktop: Windows | 11 x64 | Planned | Needs WebView2 |
 | Desktop: Linux | Ubuntu 24.04 x64 | Planned | Needs WebKitGTK and a Secret Service keyring |

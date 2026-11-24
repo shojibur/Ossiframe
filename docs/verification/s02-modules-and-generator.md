@@ -1,6 +1,6 @@
 # S02 Verification
 
-Status: **not complete**. Eleven of twelve completion criteria are met (some with notes). Criterion 10 is pending: the app generated from the published rev was built but has not been run against a server. See the checklist at the end.
+Status: **complete**. All twelve completion criteria are Met or Met with note. The Standalone_Mode app built from public rev 3ebdfc1 was run against the Lightsail server on 2026-11-25. Notes and not-verified items are listed at the end.
 
 ## Environment (local)
 
@@ -89,6 +89,19 @@ Notes:
 ### Reference: listening TCP sockets (`ss -Htln`)
 Not collected. The agent's sandbox blocked the `ssh-keyscan` call that was needed to build the pinned `UserKnownHostsFile` (the fingerprint check against `SHA256:qobMUOP//FiL3rW2mD42syTV5iK5BzW0Dw9Rylibswk` was not run). No SSH connection was made and no output is recorded. To add the reference, run `ss -Htln` on the server and append the local addresses and ports here.
 
+## Standalone mode re-check from rev 3ebdfc1 (task 15)
+
+Rev 3ebdfc1e4db310dda643fa6c439d709e6b5876a6 (contains the Cargo.toml.tmpl fix) is pushed to `origin/main`. The tree was clean, default `~/.cargo` (CARGO_HOME unset). No server was contacted.
+
+- Generated without `--rev` into `~/ossiframe-public-test/app2` (`--name "Ossi Public" --identifier com.example.ossipublic2 --modules linux-inventory --with-example-module`). The generator pinned 3ebdfc1e… in `src-tauri/Cargo.toml`.
+- No occurrence of `/Users/shojibur/Desktop/kiro/Ossiframe` in the generated project (excluding `node_modules` and `target`).
+- `pnpm install`, `pnpm typecheck`, `pnpm lint`: passed.
+- `pnpm tauri build` (full bundle): passed, exit 0. The earlier `invalid key-value pair` Cargo message did not appear (0 matches in the build log).
+- `Cargo.lock`: ossiframe-core, -desktop, -ssh and -mod-linux-inventory all resolve to `git+https://github.com/shojibur/Ossiframe?rev=3ebdfc1e…#3ebdfc1e…`.
+- `cargo test` in `src-tauri`: 2 passed, 0 failed.
+- App: `~/ossiframe-public-test/app2/src-tauri/target/release/bundle/macos/Ossi Public.app` (also a `.dmg` in `bundle/dmg/`).
+- Running this app against the server (user, 2026-11-25): the user ran `Ossi Public.app` (identifier `com.example.ossipublic2`, built in Standalone_Mode purely from public rev 3ebdfc1e4db310dda643fa6c439d709e6b5876a6 with `Cargo.lock` git sources) against the Lightsail server `54.179.76.25`. The user added the profile and connected. The fingerprint shown matched `ssh-ed25519 SHA256:qobMUOP//FiL3rW2mD42syTV5iK5BzW0Dw9Rylibswk`. Overview showed real inventory and Ports showed listening ports. The user reported "Worked". The specific ports were not itemized and not compared with `ss -Htln`.
+
 ## Standalone mode from the published rev (task 14.2)
 **Published_Rev:** `4c8857e444edf60f1274ddf352bd6fcd0007feb1` (`origin/main` = `4c8857e`).
 
@@ -125,13 +138,13 @@ Cargo prints a non-fatal `error: invalid key-value pair, expected key` for `temp
 
 Fix checks (2026-11-25): `cargo fmt --all`, `cargo clippy --workspace --all-targets -- -D warnings` and `cargo test --workspace` passed. A Local_Mode app generated into `~/ossiframe-gen-test/fixcheck` (no modules, `com.example.ossifixcheck`) contains `src-tauri/Cargo.toml` and no `.tmpl`, and `cargo check` in its `src-tauri` finished successfully.
 
-The public-rev verification at 4c8857e stays valid for the dependency crates, since the fix touches only the template and the generator. The fix lands in the next commit. The stray Cargo message should disappear once a generated app pins a rev that contains the fix. This has not been re-checked and must be confirmed after the push.
+The public-rev verification at 4c8857e stays valid for the dependency crates, since the fix touches only the template and the generator. The fix is contained in rev 3ebdfc1, and the build from that rev showed no `invalid key-value pair` message (see the 3ebdfc1 section).
 
 **Artifacts:**
 - `~/ossiframe-public-test/app/src-tauri/target/release/bundle/macos/Ossi Public.app`
 - `~/ossiframe-public-test/app/src-tauri/target/release/bundle/dmg/Ossi Public_0.1.0_aarch64.dmg`
 
-**Running the app against the server:** pending user run. No server was contacted.
+**Running the app against the server:** the 4c8857e app (`com.example.ossipublic`) itself was not run. The run was done on the 3ebdfc1 app (see the 3ebdfc1 section).
 
 ## S02 completion checklist (Requirement 16)
 
@@ -144,12 +157,12 @@ Only recorded facts are used. "Met with note" means the evidence is real but nar
 | 3 | Registry and Resolver work | Met | Unit tests in `ossiframe-core` (duplicate id, missing dependency, cycle, duplicate operation, deterministic order, unknown operation) and in the generator (unknown module, unknown dependency, cycle, automatic dependency inclusion). Doctor builds its Registry at startup. |
 | 4 | Minimal app generated | Met | `Ossi Minimal` generated with zero modules, built (`.app` and `.dmg`), run by the user (app A). |
 | 5 | App with selected modules generated | Met | `Ossi Full` generated with `linux-inventory` and the ports example, built, run by the user (app B). |
-| 6 | Generated app builds outside the monorepo | Met with note | Local_Mode apps were built in `~/ossiframe-gen-test` (path dependencies into the checkout). The Standalone_Mode app `Ossi Public` was built in `~/ossiframe-public-test/app` with git dependencies and a `Cargo.lock` that resolves all four Ossiframe crates to rev 4c8857e. |
-| 7 | Generated app connects to the Lightsail server | Met with note | Apps A and B (Local_Mode) connected and showed data. The Standalone_Mode app has not been run. |
+| 6 | Generated app builds outside the monorepo | Met | `Ossi Public` (`com.example.ossipublic2`) was generated into `~/ossiframe-public-test/app2` and built with `pnpm tauri build` purely from public rev 3ebdfc1, with `Cargo.lock` git sources for all four Ossiframe crates and no checkout path in the project. Earlier builds at 4c8857e and Local_Mode builds also passed. |
+| 7 | Generated app connects to the Lightsail server | Met | The 3ebdfc1 Standalone_Mode app connected on 2026-11-25 and the fingerprint matched `SHA256:qobMUOP//FiL3rW2mD42syTV5iK5BzW0Dw9Rylibswk`. Local_Mode apps A and B also connected earlier. |
 | 8 | Ports module retrieves real listening ports | Met with note | On app B the Ports tab showed the expected listening TCP ports for All, IPv4 and IPv6. The ports were not itemized and not compared with `ss -Htln` output (reference not collected). |
-| 9 | Custom module added without Core changes | Met with note | The `ports` example is a separate crate (`examples/custom-module`) and UI folder, copied into the generated app and registered there. It ran in app B. No diff review of Core against the example was done as a separate check. |
-| 10 | Standalone_Mode verified from a Published_Rev | **Pending** | Build from rev 4c8857e succeeded (see above). Running the app against the server is pending the user. The template fix is not yet in a published rev. |
-| 11 | `docs/developer-guide.md` exists | Met | File exists (task 11). Its note that standalone builds are unverified should be updated once criterion 10 closes. |
+| 9 | Custom module added without Core changes | Met | Source check (2026-11-25): `examples/custom-module/src/lib.rs` imports from `ossiframe_core` only `CommandSpec`, `Module`, `ModuleId`, `ModuleManifest`, `OperationContext`, `OperationError` and `OperationInfo` (plus `CancelToken`, `ExecError`, `ExecResult`, `Executor`, `ExitStatus` in its tests). All are public crate-root exports. `src/parse.rs` has no `ossiframe` references. `Cargo.toml` depends on `ossiframe-core` only among Ossiframe crates (no `ossiframe-desktop`, `-ssh` or Doctor). The UI folder imports only `@ossiframe/ui` and `@ossiframe/client`. The crate ran in app B. This is an import check, not a git diff of Core. |
+| 10 | Standalone_Mode verified from a Published_Rev | Met | App built purely from public rev 3ebdfc1 (contains the template fix) was run by the user against the Lightsail server: connected, fingerprint matched, Overview showed real inventory, Ports showed listening ports ("Worked"). |
+| 11 | `docs/developer-guide.md` exists | Met | File exists (task 11) and now states that standalone mode was verified to build and run against a real server. |
 | 12 | Results recorded | Met with note | This document. Open items are listed below. |
 
 ### Quality gate (task 12)
@@ -158,8 +171,6 @@ Task 12 was reported complete by the gate run (`cargo fmt`, `check`, `clippy -D 
 
 ### Not verified
 
-- Running the Standalone_Mode app (`Ossi Public`) against the server (criterion 10).
-- The stray Cargo message disappearing once a generated app pins a rev that contains the template fix (check after push).
 - Port-by-port comparison of the Ports tab with `ss -Htln`.
 - Changed host key behavior and password authentication (see S01).
 - Any server other than the Lightsail Ubuntu 24.04.5 x86_64 instance.

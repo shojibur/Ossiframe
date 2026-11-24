@@ -2,7 +2,7 @@
 
 Generate your own desktop app for managing Linux servers over SSH, optionally add modules, and write your own module without changing Ossiframe Core.
 
-Status: the generator is under verification. Generated apps have not yet been verified against a real server, and building from a published revision (standalone mode) has not been verified. See `docs/verification/s02-modules-and-generator.md` for what has been observed.
+Status: generated apps were verified against one real Ubuntu 24.04 server (read-only), in local mode and in standalone mode built from a published revision. Verification covers that one server and macOS Apple Silicon. See `docs/verification/s02-modules-and-generator.md` for what has been observed.
 
 ## Prerequisites
 
@@ -42,7 +42,7 @@ Invalid input stops with a one-line error and writes nothing.
 
 The generated `src-tauri/Cargo.toml` gets Ossiframe from one of two sources.
 
-- **Standalone (default).** Git dependencies on one exact commit of `https://github.com/shojibur/Ossiframe`. The commit is `--rev`, or `HEAD` of the checkout. With no `--rev`, the generator refuses a checkout with uncommitted changes. It does no network access, so the commit must already be pushed to the public repository, or `cargo build` in the generated app fails. Standalone builds from a published revision are not verified yet.
+- **Standalone (default).** Git dependencies on one exact commit of `https://github.com/shojibur/Ossiframe`. The commit is `--rev`, or `HEAD` of the checkout. With no `--rev`, the generator refuses a checkout with uncommitted changes. It does no network access, so the commit must already be pushed to the public repository, or `cargo build` in the generated app fails. A standalone app built purely from published revision 3ebdfc1 was verified to build, and to connect and show inventory and ports on a real server.
 - **Local (`--ossiframe-local <path>`).** Plain `path` dependencies into your checkout. For local testing only. The generator prints a warning, and the paths exist only on your machine, so switch to a published `rev` before sharing the app. A working local build does not show that the standalone build works.
 
 `@ossiframe/ui` and `@ossiframe/client` are copied into the app's `packages/`; they are not published to npm.
