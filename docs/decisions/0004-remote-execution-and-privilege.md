@@ -7,7 +7,8 @@ Status: Accepted (2026-11-24), with open questions.
 - Core quotes each argument (POSIX single-quote escaping) and builds one command line. Modules never concatenate shell strings.
 - Privileged commands use `sudo -n` so they fail instead of hanging on a password prompt.
 - Secrets travel over stdin, never in arguments. Known secrets are redacted from output.
-- Apps install an execution policy. Doctor's policy rejects any mutating command.
+- Read-only behavior (Doctor) comes from exposing only typed IPC operations built on predefined commands, not from command metadata. Trusted compiled code is not sandboxed.
+- S01 implements only program, arguments, quoting, timeout, cancellation, exit status, bounded output and structured errors. Privilege modes, operation records and locks are implemented in S04.
 - Operation record: ID, server ID, type, status, timestamps, sanitized output, exit code, error.
 - States: Pending, Running, Verifying, Succeeded, Failed, Cancelled, UnknownOutcome.
 - An interruption during Running results in UnknownOutcome. Never retry it automatically. Do not assume a disconnect stopped the remote process.

@@ -56,7 +56,7 @@ The module manifest is metadata. Security boundaries are enforced by the executo
 
 ## Applications
 
-Every app has the same shape: a React frontend in `src/`, a Tauri backend in `src-tauri/` that lists its modules, and its own build. Deploy uses inventory, provisioning, hosting and Laravel modules. Doctor uses inventory and auditing modules and installs a read-only execution policy, so no mutating command can run through it.
+Every app has the same shape: a React frontend in `src/`, a Tauri backend in `src-tauri/` that lists its modules, and its own build. Deploy uses inventory, provisioning, hosting and Laravel modules. Doctor uses inventory and auditing modules. It is read-only because its IPC exposes only typed discovery operations built from predefined commands; the frontend cannot supply programs, shell commands, file paths or privileged operations. Trusted compiled Rust code is not sandboxed from its own process privileges.
 
 ## SSH communication
 
@@ -64,11 +64,11 @@ Only the Rust backend talks to servers. The frontend never sees private keys or 
 
 ## Remote execution
 
-- Modules build a `CommandSpec`: program, arguments, run-as identity and privilege, timeout, optional stdin, mutating flag.
-- Core quotes arguments and assembles one command line. Privileged commands use `sudo -n`. Secrets go over stdin.
-- Read-only queries run directly. Mutating work is recorded as an operation.
+- Trusted Rust code builds a `CommandSpec`: program, arguments, timeout. Core quotes arguments and assembles one command line.
+- The executor returns exit status and bounded, redacted output, with timeout and cancellation. Output is not streamed to the frontend in S01.
+- Privileged execution (`sudo -n`), secrets over stdin, and operation records are added in S04 when provisioning needs them.
 
-### Operation record
+### Operation record (introduced in S04)
 
 ID, server ID, type, status, created/started/finished timestamps, sanitized output (size-capped), exit code, error.
 

@@ -31,7 +31,7 @@ Ossiframe apps hold credentials that are often root-equivalent. Controls below a
 | Application | Per-app Linux user | No sudo |
 | Diagnostics (Doctor) | User's chosen account | No sudo by default. Root-only reads are opt-in. |
 
-Enforcement happens in code: every `CommandSpec` declares its privilege, apps install an execution policy (Doctor rejects mutating commands), and IPC exposes only the commands an app needs.
+Enforcement happens at the IPC and composition layers: each app exposes only the typed commands it needs, built from predefined command paths. Doctor exposes no mutating or privileged commands. Module metadata is not a sandbox, and trusted compiled code is not isolated from the app's own privileges.
 
 ## Main threats and controls
 

@@ -13,7 +13,7 @@ packages/client/             @ossiframe/client (typed IPC wrappers)
 modules/<name>/              optional infrastructure modules (ossiframe-mod-<name>)
 apps/deploy/                 Ossiframe Deploy
 apps/doctor/                 Ossiframe Doctor
-templates/starter/           starter template used by the generator
+templates/starter/           starter template (S02)
 tools/ossiframe-cli/         repository-local project generator
 examples/custom-module/      extension example
 docs/                        product, architecture, security, decisions, roadmap, compatibility

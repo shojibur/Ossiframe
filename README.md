@@ -11,7 +11,20 @@ Two applications are built on it:
 
 Developers can generate their own applications from the starter template, choose modules, and add their own without changing the core.
 
-> **Status: early development.** No application code exists yet. Nothing described here is implemented or verified. Commands will be documented once they work.
+> **Status: early development.** Ossiframe Doctor (S01) connects to a server over SSH with host key pinning and shows basic system information. It builds and runs locally on macOS Apple Silicon, but has not yet been verified against a real server. See [docs/verification/s01-skeleton-foundation.md](docs/verification/s01-skeleton-foundation.md).
+
+## Run locally (macOS Apple Silicon)
+
+Requirements: Rust (stable, via rustup), Node.js 24, pnpm 11, Xcode Command Line Tools.
+
+```bash
+pnpm install
+pnpm doctor          # development mode
+# or a release build:
+pnpm --filter @ossiframe/doctor tauri build
+```
+
+Only connect to servers you are authorized to access.
 
 ## Repository layout (planned)
 

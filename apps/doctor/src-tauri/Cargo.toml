@@ -1,0 +1,26 @@
+[package]
+name = "ossiframe-doctor"
+description = "Ossiframe Doctor: read-only server discovery and diagnostics"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "ossiframe_doctor_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+ossiframe-core = { version = "0.1.0", path = "../../../crates/ossiframe-core" }
+ossiframe-desktop = { version = "0.1.0", path = "../../../crates/ossiframe-desktop" }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+tauri = { version = "2", features = [] }
+time = { version = "0.3.55", features = ["formatting"] }
+
+[dev-dependencies]
+async-trait = "0.1.92"
+tokio = { version = "1.54.1", features = ["rt", "macros"] }

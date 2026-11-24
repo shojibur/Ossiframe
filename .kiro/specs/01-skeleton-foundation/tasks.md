@@ -2,220 +2,161 @@
 
 ## Overview
 
-The design uses Rust (backend, contracts) and TypeScript (frontend), so no language question applies. The plan builds the monorepo skeleton first, then runs a russh spike against a real server so transport problems surface before the SSH crate is built on them. After that it implements Core (pure logic, with property tests), the SSH crate, the desktop crate, the starter backend, the frontend, the quality gates, and finally the manual verification on a disposable Ubuntu 24.04 VPS.
-
-Property tests for Properties 1 to 6 are not marked optional: Requirement 14.3 requires them, and engineering.md names these areas as the high-risk logic that gets automated tests. Properties 7 to 9 and 11 are verified by implementation structure plus manual verification (V2, V8, V11), as the design states. No other test suites are planned.
-
-Out of scope for every task: provisioning, Laravel, module registry or generator, `apps/deploy`, `apps/doctor`, release CI, git commit or push.
+Build Ossiframe Doctor (Tauri 2) bottom-up: workspace, then `ossiframe-core`, `ossiframe-ssh`, `ossiframe-desktop`, the Doctor backend, the frontend packages and UI. Everything up to the quality gate is implemented and tested offline. Live VPS verification comes last and does not block implementation. Languages: Rust (backend) and TypeScript (frontend). Small plain `#[test]` unit tests are part of each implementation task. No property-testing framework, fixture suites or end-to-end suites are used.
 
 ## Tasks
 
-- [ ] 1. Create the monorepo skeleton
-  - [ ] 1.1 Create the Cargo workspace and the three Rust crates
-    - Root `Cargo.toml` with members `crates/*` and `templates/starter/src-tauri`; `rust-toolchain.toml` pinned to stable
-    - Create `crates/ossiframe-core`, `crates/ossiframe-ssh`, `crates/ossiframe-desktop` as empty libraries with only the dependencies each needs now
-    - `ossiframe-core` must not depend on russh, Tauri, SQLite or keyring; `ossiframe-ssh` and `ossiframe-desktop` depend on core
-    - Commit `Cargo.lock` (do not git-ignore it)
-    - _Requirements: 1.1, 1.3, 1.4, 1.5_
+- [x] 1. Initialize the monorepo workspace
+  - Assume stable Rust (rustup) and pnpm are already installed. Install nothing globally.
+  - Create root `Cargo.toml` (workspace members `crates/*`, `apps/doctor/src-tauri`), `rust-toolchain.toml`, `pnpm-workspace.yaml` (`packages/*`, `apps/doctor`), root `package.json` with `typecheck` and `lint` scripts.
+  - Scaffold empty crates `ossiframe-core`, `ossiframe-ssh`, `ossiframe-desktop`, packages `@ossiframe/ui` and `@ossiframe/client`, and the `apps/doctor` Tauri 2 + Vite + React + TypeScript + Tailwind app.
+  - Add dependencies with `cargo add` and `pnpm add` so the current versions are resolved by the tools. Add each dependency in the task that first uses it. Core must not depend on russh, Tauri, rusqlite or keyring.
+  - Commit-ready `Cargo.lock` and `pnpm-lock.yaml` (generated, not hand-edited). Confirm `cargo check` and `pnpm install` succeed.
+  - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6_
 
-  - [ ] 1.2 Create the pnpm workspace, frontend packages and starter app shell
-    - `pnpm-workspace.yaml` with `packages/*` and `templates/starter`; root `package.json` with `typecheck`, `lint`, `build` scripts
-    - Create `packages/ui` (`@ossiframe/ui`) and `packages/client` (`@ossiframe/client`) as TypeScript packages with an empty export
-    - Create `templates/starter` (Vite + React + TypeScript + Tailwind + shadcn/ui setup) with a fixed name `ossiframe-starter`, and `src-tauri` as a minimal Tauri 2 app that builds in the Cargo workspace
-    - ESLint config including `react/no-danger`; commit `pnpm-lock.yaml`
-    - _Requirements: 1.2, 1.3, 1.5, 12.7_
+- [x] 2. Implement `ossiframe-core`
+  - [x] 2.1 Validated identifier types and `SecretString`
+    - Implement `ServerName`, `Hostname`, `Port`, `SshUser`, `KeyPath` with validating constructors and serde via `try_from`. `KeyPath` expands `~`, rejects NUL and relative paths, and does not check existence.
+    - Implement `SecretString` (zeroizing, prints and serializes as `<redacted>`).
+    - Unit tests: valid and invalid tables per type (empty, overlong, control characters, `-oProxyCommand=x`, whitespace, `;`, `/`, leading `-`, label length, port 0 and 65536, bad user names, relative and NUL key paths); `SecretString` Debug and serialize output.
+    - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9, 2.10, 7.12, 14.3_
 
-- [ ] 2. russh spike against a real server
-  - [ ] 2.1 Write the russh spike harness in `crates/ossiframe-ssh`
-    - Add a throwaway, `#[ignore]`d example or test (`examples/russh_spike.rs`) that reads host, port, user, key path and optional passphrase from environment variables
-    - Exercise, in order: connect with a `check_server_key` handler that records the key and returns `false` (confirm no authentication is attempted, V2); connect again returning `true`; Ed25519 key auth with and without passphrase (V1); open a channel, `exec` a command, and print stdout, stderr, exit status and the order of the exit-status and close messages (V4); keepalive and inactivity `Config` fields and the keepalive send methods (V7); SHA-256 fingerprint of the presented key compared with `ssh-keygen -lf` output
-    - Read the API of the russh version pinned in `Cargo.lock`; fix any signature or behavior the design lists under "Assumptions to Confirm"
-    - Never print secrets; read them only from the environment
-    - _Requirements: 6.6, 6.7, 7.1, 7.9, 4.8_
+  - [x] 2.2 `CommandSpec`, quoting and `Executor` contract
+    - Implement `CommandSpec::new` (non-empty program, no NUL, no leading `-` on the program, NUL rejected in args) and `to_command_line` (single-quote every word, `'` encoded as `'\''`).
+    - Define `ExecResult`, `ExitStatus`, `ExecError`, `CancelToken` (`tokio-util` `CancellationToken`) and the `#[async_trait] Executor` trait. Non-zero exit is `Ok`.
+    - Unit tests: quotes, spaces, `;`, `$()`, backticks, newlines, leading `-` in args, NUL rejection; round trip through local `sh -c` with `printf`; a fake `Executor` returning `Timeout`, `Cancelled` and `ConnectionLost`.
+    - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 14.3_
 
-  - [ ] 2.2 Run the spike against the disposable VPS and record findings
-    - If the user has not named a disposable server and supplied the environment variables, ask for them with the user_input tool and wait; do not use any other server
-    - Append the observed russh version, what worked, and any blocking limitation to `docs/verification/s01-skeleton-foundation.md` (create it with a short header if it does not exist). Record only what was actually observed
-    - If a limitation blocks a requirement, stop and report it to the user so ADR-0003 and the `ssh2` fallback in the design can be reconsidered before more SSH work is built
+  - [x] 2.3 Bounded capture and redaction
+    - Implement a bounded output buffer (256 KiB per stream) and `finalize_output(raw, secrets)`: lossy UTF-8, replace registered secrets with `[REDACTED]`, truncate after redaction on a char boundary, set `truncated`. When the raw cap is hit, drop trailing bytes that form a prefix of a registered secret before redaction.
+    - Unit tests: secret replaced; multiple secrets; secret split at the raw cap does not leak; truncation on a multibyte boundary sets the flag; invalid UTF-8.
+    - _Requirements: 4.1, 4.2, 4.3, 4.4, 14.3_
+
+  - [x] 2.4 Host key types and `decide`
+    - Implement `PresentedHostKey`, `PinnedHostKey`, `HostKeyDecision` and `host_key::decide`.
+    - Unit tests: no pin gives `Unknown`; same type and bytes gives `Trusted`; different bytes gives `Mismatch` with both keys; same bytes with a different type gives `Mismatch`.
+    - _Requirements: 5.1, 5.2, 5.3, 14.3_
+
+- [x] 3. Implement `ossiframe-ssh`
+  - [x] 3.1 `SshConnector` and `HostKeyHandler`
+    - Add `russh` with `cargo add`. Read the resolved version's API (authentication, key loading with passphrase, `Config` keepalive and inactivity fields, fingerprint helper) and implement against it. No russh type appears in a public signature.
+    - Define `AuthMethod` and `ConnectError`. The handler calls `decide`, records the decision in shared state, and returns `true` only for `Trusted`. `connect` maps the recorded decision to `HostKeyUnknown` or `HostKeyMismatch` without sending a credential, rejects host certificates, applies the connect timeout, and configures keepalive and inactivity timeout. Map errors to `Unreachable`, `ConnectTimeout`, `KeyFileUnreadable` (path only), `PassphraseRequired`, `PasswordRequired` and `AuthFailed`.
+    - Unit tests (offline): handler returns `false` for `Unknown` and `Mismatch` and records the decision; decision-to-error mapping; unreadable key file error has no file content; `AuthFailed` message does not distinguish user from credential.
+    - _Requirements: 5.4, 5.5, 5.6, 5.17, 6.1, 6.2, 6.3, 6.4, 6.5, 9.2, 14.3_
+
+  - [x] 3.2 `SshExecutor`
+    - Implement `Executor` for an authenticated session: open a channel, `exec` the quoted line, send EOF, collect stdout and stderr into bounded buffers, record exit status, finish on channel close, enforce timeout and cancel token (close the channel, return `Timeout` or `Cancelled`), return `ConnectionLost` if the connection ends without an exit status. Finalize output with the registered secrets from task 2.3. Expose an `is_open` check for the registry.
+    - Unit tests that do not need a server: the select/finalize logic factored into pure helpers (timeout versus cancel versus close ordering, exit-status handling, output finalization wiring).
+    - _Requirements: 3.4, 3.5, 3.6, 3.7, 3.8, 4.1, 4.2, 4.3, 9.4, 14.3_
+
+  - [x] 3.3 Ignored live integration test
+    - Add an `#[ignore]` test in `ossiframe-ssh` reading host, user and key path from environment variables. It covers exec output and exit code, timeout, cancel and disconnect detection. It must compile offline and never run in the quality gate.
     - _Requirements: 14.4_
 
-- [ ] 3. Implement `ossiframe-core`
-  - [ ] 3.1 Implement validated identifier types and errors
-    - `ident` module: `ServerName`, `Hostname`, `Port` (default 22), `SshUser`, `KeyPath` (`~` expansion, absolute, no NUL, no existence check), `ProgramName`, each with a validating constructor returning `ValidationError`
-    - Serde deserialization via `try_from = "String"` (or the integer equivalent) so IPC input passes through the same constructors
-    - `error` module with `ValidationError` and `CommandError` (`thiserror`)
-    - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9, 2.10, 2.11, 2.12_
+- [x] 4. Implement `ossiframe-desktop`
+  - [x] 4.1 SQLite store
+    - Add `rusqlite` (bundled). Implement numbered migrations in a transaction, `servers` and `host_keys` tables with no secret column (`secret_ref` is an opaque id), CRUD, `pin_host_key` (errors if a pin exists), `replace_host_key`, `clear_pin`. Access is behind a mutex.
+    - Unit tests (in-memory DB): migration applies and is idempotent; schema has no secret-bearing column; `pin_host_key` refuses to overwrite and keeps the old pin; replace works; deleting a server cascades the pin.
+    - _Requirements: 5.9, 5.13, 7.10, 7.13, 8.1, 8.10, 14.3_
 
-  - [ ] 3.2 Write property tests for identifier validation
-    - **Property 3: Identifier validation**
-    - Include a table of known-bad inputs (`-oProxyCommand=x`, whitespace, `;`, empty, overlong labels); minimum 100 iterations
-    - **Validates: Requirements 2.1 to 2.12, 14.3**
+  - [x] 4.2 Keychain vault
+    - Add `keyring`. Implement save, load and delete by opaque entry id behind a small trait so tests can use an in-memory fake. Map locked, denied or unavailable to a `keychain` error with no plaintext fallback.
+    - Unit tests with the fake: round trip; failure maps to `keychain` and nothing is stored elsewhere.
+    - _Requirements: 7.1, 7.6, 7.8, 7.10, 14.3_
 
-  - [ ] 3.3 Implement command specification and quoting
-    - `command` module: `Privilege`, `CommandSpec` (`read_only` constructor, `mutating`, optional stdin as a secret byte wrapper), `quote_arg`, `to_command_line` including the modeled `sudo -n` and `sudo -n -u` forms
-    - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7_
+  - [x] 4.3 Trust tokens and session registry
+    - Implement `TrustToken` store (backend-created, 5 minute expiry, single-use, bound to server ID, host, port and observed key; separate replace token kind). Inject a clock for testing. Implement invalidation by profile.
+    - Implement the session registry: map of server ID to `{executor, state}`, per-profile async mutex serializing connect, disconnect, update, remove and inventory, handle-open check before use, removal on lost connection, no entry after a failed or cancelled connect, per-profile cancel tokens, and `connection-state` and `connection-lost` notifications through a callback trait (Tauri-free).
+    - Unit tests: token expiry, single use, wrong-server rejection, unknown token, invalidation on host/port edit and pin replace; trusting pins the token's key, not a caller-supplied one; failed connect leaves no entry; guard serializes two concurrent calls; closed handle removes the entry.
+    - _Requirements: 5.8, 5.9, 5.10, 5.11, 5.12, 6.6, 6.7, 9.1, 9.3, 9.4, 9.5, 9.6, 11.4, 14.3_
 
-  - [ ] 3.4 Write property tests for quoting
-    - **Property 1: Quoting round-trip** (round trip through a real `sh -c` on the dev machine, plus argv recovery for `to_command_line`)
-    - **Property 2: Quoting rejects NUL**
-    - Minimum 100 iterations each
-    - **Validates: Requirements 3.1, 3.2, 3.6, 14.3**
+  - [x] 4.4 Profile operations and credential flow
+    - Implement add, list, update and remove orchestration over store, vault and registry. Save a secret only after authentication succeeds; roll back the row if the vault write fails on add; replace a saved secret only after the new credential authenticates; delete obsolete secrets on auth kind, key path or credential edits; clear the pin and disconnect on host or port edit; keep pin and session on name-only edits; remove closes the session, invalidates tokens, deletes the vault entry, then the row. `secret_ref` is never left dangling. Ephemeral credentials are held in zeroizing wrappers for one attempt only. Compute `credentialRequired` and `passphraseRequired` outcomes.
+    - Unit tests with fakes: add rollback on vault failure; edit matrix (name only, host/port, auth change); remove order and local-only effect; update failure leaves `secret_ref` valid or absent; no secret in any outbound struct (by type).
+    - _Requirements: 5.11, 5.12, 7.1, 7.3, 7.4, 7.6, 7.7, 7.8, 7.9, 7.10, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9, 14.3_
 
-  - [ ] 3.5 Implement the executor contract, read-only policy and operation types
-    - `executor` module: `CancelToken`, `OutputStream`, `ExitStatus`, `ExecResult`, `ExecError`, `Executor` trait (`async-trait`), `ExecutionPolicy`, `ReadOnlyUserPolicy`
-    - `operation` module: `OperationStatus` and `OperationRecord` (types only)
-    - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5_
+- [x] 5. Implement the Doctor backend
+  - [x] 5.1 Inventory provider
+    - In `apps/doctor/src-tauri/src/inventory/`, implement predefined probes (`hostname`, `cat /etc/os-release`, `uname -r`, `uname -m`, `cat /proc/uptime`, `nproc`, `lscpu`, `cat /proc/meminfo`, `df -P -B1 /`) with 10 second timeouts, run sequentially through `&dyn Executor`, with pure bounded parsers that return `None` for unrecognized lines. A failed, timed-out or unparsable probe sets its fields to `None`, adds a sanitized `probe_errors` entry and continues. Results are in memory only; no CPU utilization.
+    - Unit tests: each parser on a sample string, on garbage, and on oversized input without panic; provider with a fake executor covering a failing probe and a timeout.
+    - _Requirements: 9.7, 10.1, 10.2, 10.3, 10.4, 10.5, 10.6, 14.3_
 
-  - [ ] 3.6 Write a small test for the read-only policy
-    - **Property 10: Read-only**
-    - Check that every spec with `mutating = true` or `privilege != User` yields `PolicyRejected`, and a read-only user spec passes
-    - **Validates: Requirements 4.3, 4.4, 4.5**
+  - [x] 5.2 DTOs and `IpcError`
+    - Define `ServerDto`, `NewServerDto`, `UpdateServerDto`, `ServerInfoDto`, connect outcomes (`Connected`, `HostKeyUnknown`), and the tagged `IpcError` with all kinds in the design. Inbound DTOs construct validated types via their constructors and return `validation` with the field name on failure. Messages are sanitized and excerpts are capped at 2 KiB; `internal` carries no detail. Map `ConnectError`, `ExecError`, store and vault errors to `IpcError`.
+    - Unit tests: invalid input produces `validation` with the field; each source error maps to the expected kind; `internal` has no detail; excerpt cap; no secret fields on outbound DTOs.
+    - _Requirements: 2.11, 4.6, 5.7, 5.14, 11.5, 11.6, 14.3_
 
-  - [ ] 3.7 Implement redaction
-    - `redact` module: `Redactor` (`add_secret`, `redact`, zeroize on drop) and `StreamRedactor` (`push`, `finish`, hold back `max_secret_length - 1`)
-    - Code comments state the known limits (exact matches of registered secrets only); secrets under 4 characters are still redacted
-    - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5_
+  - [x] 5.3 Tauri commands and wiring
+    - Implement `list_servers`, `add_server`, `update_server`, `remove_server`, `connect_server`, `disconnect_server`, `trust_host_key`, `replace_host_key` (requires `confirm_host` equal to the profile host), `get_server_info` and `cancel_operation`. Register exactly these in `generate_handler!`. Wire the store, vault, registry and event emission in app setup. Never log raw SSH output. Accept no executable, command line, readable path or URL from the frontend. After a `Timeout`, `Cancelled` or `ConnectionLost`, report that the remote command may still run and do not retry.
+    - Unit tests: unknown server ID and a token for another server are rejected; wrong `confirm_host` keeps the pin; unknown outcome returns a token, key type and full fingerprint; mismatch returns both fingerprints and a replace token without sending credentials.
+    - _Requirements: 3.9, 4.5, 5.7, 5.9, 5.10, 5.14, 5.15, 5.16, 9.5, 9.6, 11.1, 11.2, 11.3, 11.4, 14.3_
 
-  - [ ] 3.8 Write property tests for redaction
-    - **Property 4: Redaction completeness** (random chunk splits; fixed cases for a secret at a chunk boundary and for overlapping secrets; idempotence)
-    - Minimum 100 iterations
-    - **Validates: Requirements 5.1, 5.2, 5.3, 5.4, 5.5, 14.3**
+  - [x] 5.4 Tauri security configuration
+    - Check the installed Tauri 2 schema, then set the production CSP (`default-src 'none'`, scripts and styles from `'self'`, no `unsafe-eval`, no remote origin, IPC allowance as the installed version requires). Capabilities apply to window `main` only with core event defaults and no `fs`, `shell`, `http`, `opener` or `dialog` plugin. Disable devtools in release. Use app manifest command permissions if the installed version supports them.
+    - _Requirements: 13.1, 13.2, 13.3, 13.4, 13.5_
 
-  - [ ] 3.9 Implement the host key decision
-    - `host_key` module: `PresentedHostKey`, `PinnedHostKey`, `HostKeyDecision`, `decide` (constant-time byte compare), `fingerprint_sha256` (`sha2` + base64 without padding; use the method confirmed in task 2)
-    - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5_
+- [x] 6. Implement the frontend
+  - [x] 6.1 `@ossiframe/client`
+    - Hand-written DTO and `IpcError` types and one typed async wrapper per command. Normalize thrown values to `IpcError`. This is the only code that calls `invoke`. Add event subscription helpers for `connection-state` and `connection-lost`.
+    - _Requirements: 11.7, 11.8_
 
-  - [ ] 3.10 Write property tests for the host key decision and fingerprint
-    - **Property 5: Host key decision** (including same bytes with a different key type)
-    - **Property 6: Fingerprint format**
-    - Minimum 100 iterations
-    - **Validates: Requirements 6.1, 6.2, 6.3, 6.4, 6.5, 14.3**
+  - [x] 6.2 `@ossiframe/ui`
+    - Add shadcn/ui-based components Doctor uses and other apps would reuse (button, input, dialog, badge, field with error text). No themes, animations or placeholder navigation.
+    - _Requirements: 1.3, 1.6_
 
-- [ ] 4. Checkpoint - Ensure all tests pass
-  - Run `cargo fmt --check`, `cargo clippy -- -D warnings`, `cargo test` for core. Ensure all tests pass, ask the user if questions arise.
+  - [x] 6.3 Doctor pages and dialogs
+    - Server list (state badge, fingerprint prefix, connect, edit, remove), add/edit dialog (field-level validation errors, "Save secret in OS keychain" off by default, pin-clear warning on host/port edit, typed key path), authentication prompt (clears fields on submit; retries `connect_server` with the dialog-held credential after trust), host fingerprint dialog (key type, full fingerprint in monospace, TOFU wording "Verify this fingerprint", Trust and Cancel), changed host key warning (both fingerprints, no continue, "Replace pinned key" with typed host), connected overview (all inventory fields, observation timestamp, "unavailable" with probe error, stale marking when disconnected, Refresh, loading and error states), and plain-text error messages per `IpcError` kind including the "remote command may still be running" notice. Render remote data as text nodes only.
+    - _Requirements: 3.9, 5.18, 7.2, 7.3, 7.4, 7.5, 7.7, 7.11, 12.1, 12.2, 12.3, 12.4, 12.5, 12.6, 12.7, 12.8, 12.9, 12.10, 12.11_
 
-- [ ] 5. Implement `ossiframe-ssh`
-  - [ ] 5.1 Implement `HostKeyHandler` and `SshConnector`
-    - `HostKeyHandler` implements the russh handler: convert the presented key to `PresentedHostKey` (reject certificates), call `host_key::decide`, record the decision in shared state, return `true` only for `Trusted`
-    - `SshConnector::connect` with `ConnectTarget`, `AuthMethod`, `ConnectOptions` (timeouts and keepalive defaults from the design), mapping failures to `ConnectError` using the recorded decision rather than russh error text
-    - Key-file loading with optional passphrase; no authentication call before `Trusted`; no russh type in any public signature
-    - Reuse and then remove the spike code from task 2
-    - _Requirements: 6.6, 6.7, 6.8, 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 7.8_
+  - [x] 6.4 ESLint and TypeScript configuration
+    - Configure ESLint with `eslint-plugin-react` and `react/no-danger` as an error, and strict TypeScript. Ensure `pnpm typecheck` and `pnpm lint` run across the workspace.
+    - _Requirements: 12.12, 14.1_
 
-  - [ ] 5.2 Implement `SshExecutor` run loop and keepalive
-    - Implement `Executor::run`: policy check, `to_command_line`, channel open and exec, stdin or EOF, select over channel messages, deadline and `CancelToken`, `StreamRedactor` per stream, 256 KiB caps with `truncated`, `on_output` callback, end on channel close, `ConnectionLost` when the stream ends without an exit status
-    - Background keepalive task: after `keepalive_max_misses` consecutive failures mark the session dead, notify the owner (callback or channel) and fail running commands with `ConnectionLost`
-    - Install `ReadOnlyUserPolicy` as the S01 policy; never retry on `Timeout`, `Cancelled` or `ConnectionLost`
-    - _Requirements: 4.1, 4.2, 4.6, 4.7, 4.8, 4.9, 4.10, 4.11, 7.9_
+- [x] 7. Consolidated quality gate
+  - Run `cargo fmt --check`, `cargo check`, `cargo clippy -- -D warnings`, `cargo test` (ignored live tests excluded), `pnpm typecheck`, `pnpm lint` and a production build of Doctor. Run `cargo audit` if available and `shellcheck` on any script added. Fix failures. Confirm lockfiles are present.
+  - _Requirements: 1.5, 14.1, 14.2, 14.3_
 
-  - [ ] 5.3 Add the ignored real-server integration harness for V4 to V7
-    - `#[ignore]` test in `crates/ossiframe-ssh/tests/` reading host, user and key path from environment variables; never run by default `cargo test`
-    - Cases: stdout and stderr split with real exit code (`ls /nonexistent`, exit 2), `sleep 30` with a 2 s timeout, cancellation during `sleep 30`, and a keepalive loss check that the user triggers by blocking the network
-    - Replace the spike example with this harness once it covers the same ground
-    - _Requirements: 4.6, 4.7, 4.8, 4.10, 7.9, 14.4_
+- [ ] 8. Live VPS verification (pending: requires the user's disposable Ubuntu 24.04 VPS)
+  - Do not start without a VPS the user names and authorizes. If none is available, leave this task unchecked and mark it pending; do not fabricate results.
+  - Run from macOS: Ed25519 key with and without passphrase, wrong passphrase, password auth, stdout/stderr/exit code capture, timeout, cancel, disconnect detection, changed host key, keychain behavior on an unsigned build, inventory comparison with `cat /etc/os-release`, `uname -a`, `free -b` and `df /`, unreachable host and wrong port. Run the ignored `ossiframe-ssh` integration test with environment variables.
+  - Search the SQLite file, logs and IPC traces for the test password and passphrase. A hit means S01 is not done.
+  - _Requirements: 14.4, 14.6, 14.7_
 
-- [ ] 6. Implement `ossiframe-desktop`
-  - [ ] 6.1 Implement the SQLite store
-    - `store` module with `rusqlite` (bundled): numbered migrations in a transaction (migration 1 creates `schema_version`, `servers`, `host_keys` exactly as in the design), `open`, `add_server`, `list_servers`, `get_server`, `remove_server`, `get_host_key`, `pin_host_key` (fails if a pin exists), `replace_host_key`
-    - No secret column; `secret_ref` is an opaque ID
-    - _Requirements: 8.1, 8.3, 8.5, 8.6, 6.12, 6.13_
-
-  - [ ] 6.2 Implement the vault and the secret string type
-    - `vault` module over `keyring` (`save`, `load`, `delete`); `SecretString` via `secrecy` + `zeroize` with redacted `Debug` and `Serialize` (check license and maintenance when adding)
-    - _Requirements: 9.1, 9.3, 9.4, 9.5_
-
-  - [ ] 6.3 Implement IPC helpers and DTOs
-    - `ipc` module: DTOs (camelCase serde) with secrets only in inbound types, `IpcError` and mapping from `ValidationError`, `ConnectError`, `ExecError`, `StoreError`, `VaultError` (stderr excerpt redacted and capped at 2 KiB), `ConnectionState`, `SessionRegistry`, `PendingTrust` (token, server ID, key, created time; 5-minute expiry; single use), replace-token handling for host key mismatch
-    - Event helpers for `connection-state` and `connection-lost`
-    - _Requirements: 6.7, 6.8, 6.9, 6.10, 6.11, 6.14, 11.3, 11.5, 9.5_
-
-- [ ] 7. Checkpoint - Ensure all tests pass
-  - Run the Rust quality gates across the workspace. Ensure all tests pass, ask the user if questions arise.
-
-- [ ] 8. Implement the starter app backend
-  - [ ] 8.1 Implement the server info provider
-    - `templates/starter/src-tauri/src/server_info/`: probe list (hostname, os-release, uname -r, uname -m, /proc/uptime, nproc, lscpu, /proc/meminfo, `df -P -B1 /`), each a `CommandSpec::read_only` with 10 s timeout; pure parsers that bound input size and return `None` on malformed text; `collect(&dyn Executor, &CancelToken) -> ServerInfo` that records `observed_at` at first probe start, runs probes sequentially and turns failures into `probe_errors`
-    - Uses nothing app-specific so it can later move into a module
-    - _Requirements: 10.1, 10.2, 10.3, 10.4, 10.5_
-
-  - [ ] 8.2 Write parser tests for the server info provider
-    - Small fixture tests for os-release, meminfo, df and lscpu using sample text in the standard Ubuntu 24.04 format (replace with output captured in task 12 when available), plus malformed and empty input returning `None` without panic
-    - _Requirements: 10.4_
-
-  - [ ] 8.3 Implement the Tauri commands, state wiring and security configuration
-    - `commands.rs`: `add_server` (typed validation, keychain write with row rollback), `list_servers`, `remove_server` (disconnect, delete vault entry, then row), `connect_server` (load pin and secret, connect, return `HostKeyUnknown` with token or `IpcError`), `trust_host_key`, `replace_host_key` (token plus typed host confirmation), `disconnect_server`, `get_server_info`, `cancel_operation`; no command takes a command line, file path or URL
-    - `main.rs`: open store in the app data dir, build `Vault` and `SessionRegistry`, register exactly these commands in `generate_handler!` and attempt the app-manifest command allow-list if the Tauri 2 docs support it
-    - `tauri.conf.json`: strict CSP without `unsafe-eval`, devtools off in release; `capabilities/default.json` for window `main` with core event defaults only and no `fs`, `shell`, `http`, `opener` or `dialog`
-    - Add a build-time check script that fails the production build if the CSP contains `unsafe-eval`; run `shellcheck` on it if it is a shell script
-    - _Requirements: 6.7, 6.8, 6.9, 6.10, 6.13, 6.14, 7.8, 8.1, 8.2, 8.3, 8.4, 9.1, 9.2, 9.3, 9.4, 11.1, 11.2, 11.3, 11.5, 13.1, 13.2, 13.3, 13.4, 14.2_
-
-- [ ] 9. Implement the frontend
-  - [ ] 9.1 Implement `@ossiframe/client`
-    - DTO and `IpcError` types mirroring the Rust types; `api` object with one typed function per IPC command; normalize thrown values into `IpcError`; the only module that imports `invoke`; subscribe helpers for `connection-state` and `connection-lost`
-    - _Requirements: 11.1, 11.4, 11.5_
-
-  - [ ] 9.2 Implement `@ossiframe/ui` components used by the starter
-    - Only components the starter uses: `StatusBadge`, `ErrorPanel` (message per error kind, stderr excerpt in `<pre>` as text), `KeyValueList`, `Fingerprint`, dialog wrappers
-    - _Requirements: 12.1, 12.6, 12.7_
-
-  - [ ] 9.3 Implement the starter pages and dialogs
-    - `ServerListPage` (status badge, fingerprint prefix, add and remove), `AddServerDialog` (field-level validation messages, key file or password switch, "Save secret in OS keychain" off by default, secret cleared on submit), `TrustHostKeyDialog` (key type, full fingerprint, Trust and Cancel), host key mismatch panel (both fingerprints, no continue button, "Replace pinned key" with typed host confirmation), `ServerOverviewPage` (all info fields, "unavailable" with probe error on request, observed-at time and age, Refresh and Cancel)
-    - Wire the connect flow: `connectServer`, on `hostKeyUnknown` show the dialog, `trustHostKey`, reconnect, then `getServerInfo`
-    - Keep the last result in memory only
-    - _Requirements: 12.1, 12.2, 12.3, 12.4, 12.5, 12.6, 12.7, 12.8, 9.2, 10.2, 10.5_
-
-- [ ] 10. Checkpoint - Ensure all tests pass
-  - Ensure the Rust workspace and frontend packages build and typecheck. Ensure all tests pass, ask the user if questions arise.
-
-- [ ] 11. Run the quality gates
-  - [ ] 11.1 Make every required gate pass
-    - Run `cargo fmt --check`, `cargo clippy -- -D warnings`, `cargo check`, `cargo test`, `pnpm typecheck`, `pnpm lint`, and the production build of the starter app (including the CSP check from task 8.3); fix every failure at its cause
-    - Add the root script entries needed to run them in one command if they are missing
-    - Run `cargo audit` once locally if available and keep its result for the verification record
-    - _Requirements: 1.6, 14.1, 14.2, 13.1_
-
-- [ ] 12. Manual verification on a real disposable VPS
-  - [ ] 12.1 Run V1 to V12 and record the evidence
-    - Use only the disposable Ubuntu 24.04 VPS the user names; ask with the user_input tool if none is named, and wait. This task needs the user to run the desktop app and perform the manual steps (blocking the network, changing the host key or editing a scratch pin) that an agent cannot do alone
-    - Build the checklist in `docs/verification/s01-skeleton-foundation.md` with date, app commit, server image, and a short result per verification point V1 to V12 (V10: compare displayed values with `cat /etc/os-release`, `uname -a`, `free -b`, `df /` typed manually; V11: search the SQLite file, app log and IPC traces for the test password and passphrase)
-    - Record only points that were actually run; mark any others "not run". Include the spike findings from task 2.2 and the `cargo audit` result
-    - If any secret is found in the V11 search, treat S01 as not done and report it
-    - _Requirements: 14.4, 14.5, 6.6, 6.7, 6.8, 7.1, 7.2, 7.7, 7.9, 9.5, 10.2_
-
-  - [ ] 12.2 Update `docs/compatibility.md` with observed versions
-    - Add the versions actually observed during verification (Ubuntu image and kernel, OpenSSH server version, russh and Tauri versions from `Cargo.lock`, macOS version, Rust and Node toolchain versions). Do not add values that were not observed
-    - _Requirements: 14.4_
+- [ ] 9. Record verification evidence
+  - Write `docs/verification/s01-skeleton-foundation.md` with date, commit, server image, and only the checks actually run. If task 8 did not run, state that live verification is pending. Note any russh failure and that ADR-0003 needs revisiting.
+  - Update `docs/compatibility.md` with observed versions only (Rust, Tauri, russh, rusqlite, keyring, server OS from the run). Leave unobserved entries unchanged.
+  - _Requirements: 14.5, 14.7_
 
 ## Notes
 
-- Property tests are required (not optional) because Requirement 14.3 mandates them. Each uses at least 100 iterations.
-- Task 2 gates the SSH work. If it finds a blocking russh limitation, stop and review ADR-0003 before continuing.
-- Tasks 12.1 and 12.2 depend on a real server and manual steps by the user; they must never contain invented results.
-- No task commits, pushes or publishes.
+- Tests are embedded in the implementation tasks and are not optional. The design has no Correctness Properties section, so no property tests exist.
+- Tasks 1 to 7 need no VPS. Task 8 is the only task that needs live infrastructure and may remain pending.
+- Out of scope: provisioning, sudo, modules and registry, generator, auditing, Deploy, SFTP, terminal, SSH agent, release CI.
 
 ## Task Dependency Graph
 
 ```json
 {
   "waves": [
-    { "id": 0, "tasks": ["1.1"] },
-    { "id": 1, "tasks": ["1.2", "2.1"] },
+    { "id": 0, "tasks": ["1"] },
+    { "id": 1, "tasks": ["2.1"] },
     { "id": 2, "tasks": ["2.2"] },
-    { "id": 3, "tasks": ["3.1"] },
-    { "id": 4, "tasks": ["3.2", "3.3"] },
-    { "id": 5, "tasks": ["3.4", "3.5", "3.7", "3.9"] },
-    { "id": 6, "tasks": ["3.6", "3.8", "3.10"] },
-    { "id": 7, "tasks": ["4"] },
-    { "id": 8, "tasks": ["5.1", "6.1", "6.2"] },
-    { "id": 9, "tasks": ["5.2", "6.3"] },
-    { "id": 10, "tasks": ["5.3", "8.1"] },
-    { "id": 11, "tasks": ["7"] },
-    { "id": 12, "tasks": ["8.2", "8.3", "9.1", "9.2"] },
-    { "id": 13, "tasks": ["9.3"] },
-    { "id": 14, "tasks": ["10"] },
-    { "id": 15, "tasks": ["11.1"] },
-    { "id": 16, "tasks": ["12.1"] },
-    { "id": 17, "tasks": ["12.2"] }
+    { "id": 3, "tasks": ["2.3"] },
+    { "id": 4, "tasks": ["2.4"] },
+    { "id": 5, "tasks": ["3.1"] },
+    { "id": 6, "tasks": ["3.2"] },
+    { "id": 7, "tasks": ["3.3", "4.1"] },
+    { "id": 8, "tasks": ["4.2"] },
+    { "id": 9, "tasks": ["4.3"] },
+    { "id": 10, "tasks": ["4.4"] },
+    { "id": 11, "tasks": ["5.1", "6.1", "6.2"] },
+    { "id": 12, "tasks": ["5.2"] },
+    { "id": 13, "tasks": ["5.3"] },
+    { "id": 14, "tasks": ["5.4", "6.3"] },
+    { "id": 15, "tasks": ["6.4"] },
+    { "id": 16, "tasks": ["7"] },
+    { "id": 17, "tasks": ["8"] },
+    { "id": 18, "tasks": ["9"] }
   ]
 }
 ```

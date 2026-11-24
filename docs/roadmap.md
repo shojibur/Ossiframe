@@ -4,7 +4,7 @@ Six specifications, implemented one at a time. Each ends with something that wor
 
 | Spec | Delivers | Depends on | Status |
 |---|---|---|---|
-| S01 Skeleton Foundation | Monorepo, Core, SSH auth, host key pinning, keychain, server metadata, basic remote execution, real server information in a minimal desktop app | none | Spec drafted |
+| S01 Skeleton Foundation | Monorepo, Core, SSH auth, host key pinning, keychain, server metadata, basic remote execution, real server information in a minimal desktop app | none | Implemented, live verification pending |
 | S02 Modules and Project Generator | Public module interfaces, explicit registration, starter template, module selection, generator, standalone builds, custom module example | S01 | Not started |
 | S03 Ossiframe Doctor | Independent app, read-only discovery, inventory, security checks, service diagnostics, evidence-based findings, report export | S02 | Not started |
 | S04 Infrastructure Provisioning | Fresh Ubuntu preflight, package installation, NGINX, PHP, Composer, MySQL, verification and recovery | S02 | Not started |

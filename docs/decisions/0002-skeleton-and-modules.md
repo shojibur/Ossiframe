@@ -15,5 +15,5 @@ Few crates keep builds and versioning simple. Explicit registration is readable 
 
 ## Consequences
 - Adding a module means adding a dependency and one registration line, then rebuilding.
-- The manifest is metadata, not a security boundary. Real boundaries are the executor's privilege checks, which modules an app includes, and which IPC commands it exposes.
+- The manifest is metadata, not a security boundary. Real boundaries are which modules an app includes and which typed IPC commands it exposes (plus, from S04, executor privilege checks).
 - A dependency check (Cargo metadata script, later run by a Kiro hook and CI) keeps Core free of module and app dependencies.
