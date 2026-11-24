@@ -368,6 +368,16 @@
         "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
         "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
         "timestamp": 1795543714035
+      },
+      {
+        "executionId": "53dab680-22ec-4883-b49b-ea6c25b3d531",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795559288342
+      },
+      {
+        "executionId": "53dab680-22ec-4883-b49b-ea6c25b3d531",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795561107634
       }
     ],
     "11. Developer quick-start": [
@@ -375,6 +385,16 @@
         "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
         "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
         "timestamp": 1795540826696
+      },
+      {
+        "executionId": "53dab680-22ec-4883-b49b-ea6c25b3d531",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795561107918
+      },
+      {
+        "executionId": "53dab680-22ec-4883-b49b-ea6c25b3d531",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795561198173
       }
     ],
     "12. Consolidated quality gate": [
@@ -382,6 +402,16 @@
         "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
         "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
         "timestamp": 1795540826725
+      },
+      {
+        "executionId": "53dab680-22ec-4883-b49b-ea6c25b3d531",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795561198569
+      },
+      {
+        "executionId": "53dab680-22ec-4883-b49b-ea6c25b3d531",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795561666561
       }
     ],
     "13.1 Generate and build a minimal app and an app with modules": [
@@ -389,6 +419,16 @@
         "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
         "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
         "timestamp": 1795540826756
+      },
+      {
+        "executionId": "53dab680-22ec-4883-b49b-ea6c25b3d531",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795561666662
+      },
+      {
+        "executionId": "53dab680-22ec-4883-b49b-ea6c25b3d531",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795562081820
       }
     ],
     "13.2 Run both generated apps against the Lightsail server (manual, needs the user)": [
@@ -396,6 +436,16 @@
         "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
         "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
         "timestamp": 1795540826792
+      },
+      {
+        "executionId": "53dab680-22ec-4883-b49b-ea6c25b3d531",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795562082404
+      },
+      {
+        "executionId": "53dab680-22ec-4883-b49b-ea6c25b3d531",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795562530088
       }
     ],
     "14.1 Stop and request user approval to publish the commit": [
@@ -403,6 +453,16 @@
         "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
         "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
         "timestamp": 1795540826830
+      },
+      {
+        "executionId": "53dab680-22ec-4883-b49b-ea6c25b3d531",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795562554265
+      },
+      {
+        "executionId": "53dab680-22ec-4883-b49b-ea6c25b3d531",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795562560878
       }
     ],
     "14.2 Generate and build outside the repository from the Published_Rev": [
@@ -410,6 +470,21 @@
         "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
         "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
         "timestamp": 1795540826865
+      },
+      {
+        "executionId": "53dab680-22ec-4883-b49b-ea6c25b3d531",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795562561264
+      },
+      {
+        "executionId": "21445023-c837-445b-94da-3989211e7120",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795562790350
+      },
+      {
+        "executionId": "21445023-c837-445b-94da-3989211e7120",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795563475470
       }
     ],
     "15. Record evidence and confirm completion": [
@@ -417,6 +492,11 @@
         "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
         "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
         "timestamp": 1795540826904
+      },
+      {
+        "executionId": "21445023-c837-445b-94da-3989211e7120",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795563475603
       }
     ],
     "1. Spike: cross-crate `generate_handler!` with the installed Tauri 2.12": [
@@ -480,6 +560,27 @@
         "executionId": "d3acec7d-f109-40f5-add3-8cb146af000f",
         "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
         "timestamp": 1795543316967
+      }
+    ],
+    "10. Generator CLI `tools/ossiframe-cli`": [
+      {
+        "executionId": "53dab680-22ec-4883-b49b-ea6c25b3d531",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795561107731
+      }
+    ],
+    "13. Verify generated apps in Local_Mode on the Lightsail server": [
+      {
+        "executionId": "53dab680-22ec-4883-b49b-ea6c25b3d531",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795562530158
+      }
+    ],
+    "14. Verify Standalone_Mode with a Published_Rev": [
+      {
+        "executionId": "21445023-c837-445b-94da-3989211e7120",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795563475534
       }
     ]
   }

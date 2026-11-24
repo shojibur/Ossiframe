@@ -294,7 +294,7 @@ mod tests {
         };
         let tk = tokens_for(&src, &["linux-inventory"], true);
         for rel in [
-            "src-tauri/Cargo.toml",
+            "src-tauri/Cargo.toml.tmpl",
             "src-tauri/src/lib.rs",
             "src/modules.ts",
             "src-tauri/tauri.conf.json",

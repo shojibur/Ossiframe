@@ -118,7 +118,7 @@ Tests are small plain `#[test]` unit tests embedded in the implementation tasks 
     - Run `pnpm -r typecheck` and `pnpm -r lint` (include the folder in a workspace tsconfig or the template check so it is type-checked).
     - _Requirements: 6.8, 6.9, 11.8, 11.10_
 
-- [ ] 10. Generator CLI `tools/ossiframe-cli`
+- [x] 10. Generator CLI `tools/ossiframe-cli`
   - [x] 10.1 Create the crate with argument parsing and input validation
     - Crate `ossiframe-cli` with `clap` (derive), command `new <dir> --name --identifier [--modules] [--with-example-module] [--rev] [--ossiframe-local] [--allow-ossiframe-namespace]`. Add `tools/*` to root workspace members.
     - Validate name (1 to 64 chars, starts with a letter, `[A-Za-z0-9 _-]`), identifier (two or more segments, each `[a-z][a-z0-9-]*`, at most 128 chars, not ending `.app`, `dev.ossiframe.` refused without the flag), and `<dir>` (absent or empty directory only). One-line error, non-zero exit, nothing written.
@@ -130,43 +130,43 @@ Tests are small plain `#[test]` unit tests embedded in the implementation tasks 
     - Add the plain string `{{key}}` renderer that fails on unknown tokens or a leftover `{{` in any text file. Binary files are copied unchanged. Read the template from disk at run time.
     - Add unit tests: unknown token, leftover `{{`, unknown module, unknown dependency, cycle, zero-module selection, automatic inclusion of required dependencies, dirty-tree refusal.
     - _Requirements: 2.7, 8.6, 8.7, 8.8, 8.9, 8.10, 8.13, 8.14, 10.1, 10.2, 10.8, 14.3_
-  - [-] 10.3 Render, vendor and finalize the generated app
+  - [x] 10.3 Render, vendor and finalize the generated app
     - Render the starter into a temporary sibling directory, then rename to `<dir>` only on success. Remove the temp directory on failure.
     - For each selected module in resolved order, write the Cargo dependency and `.register(...)`, plus the TS import and `pages` entry only if the module has a `ui/` folder. Copy `packages/ui` and `packages/client` into `<dir>/packages/` with `workspace:*` dependencies, and copy each selected module's `ui/` files into `<dir>/src/modules/<id>/`. With zero modules, emit the starter with an empty registry and no module pages. `--with-example-module` copies `examples/custom-module` to `<dir>/modules/ports/` and rewrites its `ossiframe-core` dependency to the app's source.
     - In Standalone_Mode write all Ossiframe crates as Git dependencies on `https://github.com/shojibur/Ossiframe` with one `rev` (`{ git = "https://github.com/shojibur/Ossiframe", rev = "<40-hex>" }`), rendered through the whole-line `{{ossiframe_deps}}` token. The ports example is always `path = "../modules/ports"` inside the app. `--ossiframe-local <path>` requires `<path>/crates/ossiframe-core/Cargo.toml`, renders plain `path = "<canonical local checkout>/crates/<crate>"` dependencies (module crates via their local paths) with no git source and no `[patch]` section, prints a warning, and adds "local testing only; remove before sharing" to the generated README. The output and README state that Standalone_Mode needs the pinned commit to be a Published_Rev and that `--ossiframe-local` is Local_Mode only. The app gets its own name, identifier, data directory, keychain service namespace, README and `.kiro` guidance.
     - Add unit tests: generated CSP equals Doctor's CSP, no manifest `path =` entry outside the project without `--ossiframe-local`, bad `--ossiframe-local` path writes nothing.
     - _Requirements: 8.12, 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 10.1, 10.3, 10.4, 10.5, 10.6, 10.7, 10.9, 10.10, 14.3_
 
-- [~] 11. Developer quick-start
+- [x] 11. Developer quick-start
   - Write `docs/developer-guide.md` (at most 150 lines): generate an app, pin Ossiframe or use a local checkout, `pnpm install` and `pnpm tauri dev`, write a module, register it, add its page, test with a fake executor, build. State that modules are trusted code, the manifest is not a sandbox, all S02 operations are read-only, and S04 must add explicit authorization and approval boundaries before any mutating or privileged operation. Add a link in `README.md` of at most two lines.
   - _Requirements: 12.1, 12.2, 12.3, 12.4_
 
-- [~] 12. Consolidated quality gate
+- [x] 12. Consolidated quality gate
   - Run and fix until clean: `cargo fmt --all --check`, `cargo check --workspace --all-targets`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`, `pnpm -r typecheck`, `pnpm -r lint`, `cargo audit`, `pnpm audit`, the Doctor production build, and `shellcheck` for any added script.
   - Confirm the new dependencies (`serde_json`, optional `tauri`, `clap`) are maintained and permissively licensed.
   - Report real command results. If a tool is not installed, say so and do not claim the check passed.
   - _Requirements: 13.2, 13.6, 14.1, 14.2, 14.3, 14.4, 14.5, 14.6, 14.7, 14.8_
 
-- [ ] 13. Verify generated apps in Local_Mode on the Lightsail server
-  - [~] 13.1 Generate and build a minimal app and an app with modules
+- [x] 13. Verify generated apps in Local_Mode on the Lightsail server
+  - [x] 13.1 Generate and build a minimal app and an app with modules
     - From the repository run `ossiframe-cli new ~/ossiframe-test/min --name "Min Ops" --identifier dev.example.min --ossiframe-local <repo path>` (no modules) and `ossiframe-cli new ~/ossiframe-test/acme --name "Acme Ops" --identifier dev.example.acme --modules linux-inventory --with-example-module --ossiframe-local <repo path>`. Run `pnpm install` and `pnpm tauri build` in each generated directory.
     - Inspect each generated `capabilities/main.json` and confirm only the eleven Shared_Commands. Record this as Local_Mode only. This task must not commit or push.
     - _Requirements: 8.8, 9.1, 9.2, 9.5, 10.3, 10.5, 15.5, 15.7, 16.1_
-  - [~] 13.2 Run both generated apps against the Lightsail server (manual, needs the user)
+  - [x] 13.2 Run both generated apps against the Lightsail server (manual, needs the user)
     - The user runs each built app and connects to `54.179.76.25` (user `ubuntu`, read-only, disposable server named by the user). Minimal app: basic connection info (profile, endpoint, state, pinned fingerprint) and no inventory page. Acme app: `linux-inventory` overview and the `ports` page with real listening sockets, compared by the user against `ss -tln` run on the server. Try each `family` value on the ports page.
     - Record only what the user reports. Never fabricate output.
     - _Requirements: 7.8, 11.3, 11.8, 15.1, 15.6, 16.1_
 
-- [ ] 14. Verify Standalone_Mode with a Published_Rev
-  - [~] 14.1 Stop and request user approval to publish the commit
+- [x] 14. Verify Standalone_Mode with a Published_Rev
+  - [x] 14.1 Stop and request user approval to publish the commit
     - Stop. Ask the user to approve committing and pushing the S02 implementation to the public repository `https://github.com/shojibur/Ossiframe`, and to name the revision (sha or tag) to use. Do not commit or push without that approval, and never push from this task. Continue only after the user confirms the revision is published.
     - _Requirements: 10.6, 15.8, 16.1_
-  - [~] 14.2 Generate and build outside the repository from the Published_Rev
+  - [x] 14.2 Generate and build outside the repository from the Published_Rev
     - In a directory without the monorepo checkout, run `ossiframe-cli new` with `--rev <published rev>`, no `--ossiframe-local`, `--modules linux-inventory --with-example-module`. Run `pnpm install` and `pnpm tauri build`. The generator must run from a clean tree (a dirty tree is refused).
     - `grep` the generated manifests to confirm every Ossiframe dependency, including selected modules, resolves from the Git rev and no `path =` entry leaves the project. Connect to the Lightsail server and confirm the overview and ports page work (user observes). A dirty local checkout is not proof.
     - _Requirements: 10.1, 10.7, 10.11, 15.5, 15.8, 16.1_
 
-- [~] 15. Record evidence and confirm completion
+- [-] 15. Record evidence and confirm completion
   - Complete `docs/verification/s02-modules-and-generator.md` with real output only: spike result, Doctor recheck, Registry and Resolver test results, minimal and module app builds, Lightsail runs, `ss -tln` comparison, Doctor registers only `linux-inventory`, capability files list only the eleven commands, quality gate results, Local_Mode vs Standalone_Mode results, and the custom `ports` module added without a Core change.
   - Check the S02 completion list (Requirement 16) item by item: (1) Doctor connects and shows real inventory; (2) Doctor consumes `linux-inventory`; (3) Registry and Resolver work; (4) minimal app generated; (5) app with selected modules generated; (6) generated app builds outside the monorepo; (7) generated app connects to the Lightsail server; (8) ports module retrieves real listening ports; (9) custom module added without Core changes; (10) Standalone_Mode verified from a Published_Rev; (11) `docs/developer-guide.md` exists; (12) results recorded. Mark any item not met as not complete.
   - List every item not verified. Keep the S01 open checks documented as open and outside S02 completion: independent fingerprint comparison through the Lightsail console pending, password authentication unverified and disabled.

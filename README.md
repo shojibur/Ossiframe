@@ -26,6 +26,8 @@ pnpm --filter @ossiframe/doctor tauri build
 
 Only connect to servers you are authorized to access.
 
+To generate your own app from the starter template, see the [developer quick-start](docs/developer-guide.md). Generated apps are not yet verified on a real server, and standalone mode (building from a published revision) is not verified yet.
+
 ## Repository layout (planned)
 
 | Path | Contents |

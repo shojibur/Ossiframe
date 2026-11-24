@@ -74,7 +74,14 @@ fn copy_tree(
             continue;
         }
         let from = entry.path();
-        let to = dst.join(name);
+        // Template manifests holding tokens are not valid TOML, so the
+        // template stores them as `Cargo.toml.tmpl` (Cargo would scan them in
+        // a git checkout). Rendered output gets the real name.
+        let out_name = match (tokens, name) {
+            (Some(_), "Cargo.toml.tmpl") => "Cargo.toml",
+            _ => name,
+        };
+        let to = dst.join(out_name);
         let ft = entry.file_type().at(&from)?;
         if ft.is_symlink() {
             return msg(format!("refusing to copy symlink {}", from.display()));
@@ -401,8 +408,22 @@ mod tests {
                 .is_file()
         );
         assert!(target.join("src/modules/ports/index.ts").is_file());
+        assert!(target.join("src-tauri/Cargo.toml").is_file());
+        assert!(!target.join("src-tauri/Cargo.toml.tmpl").exists());
         assert!(target.join("modules/ports/src/lib.rs").is_file());
         assert!(!target.join("modules/ports/ui").exists());
+        // Generated CSP lines equal Doctor's.
+        let csp = |p: &Path| -> Vec<String> {
+            fs::read_to_string(p)
+                .unwrap()
+                .lines()
+                .filter(|l| l.contains("\"csp\"") || l.contains("\"devCsp\""))
+                .map(|l| l.trim().to_owned())
+                .collect()
+        };
+        let doctor = csp(&root.join("apps/doctor/src-tauri/tauri.conf.json"));
+        assert_eq!(doctor.len(), 2);
+        assert_eq!(doctor, csp(&target.join("src-tauri/tauri.conf.json")));
         // Non-empty target is refused and nothing else is written next to it.
         assert!(generate(&job).is_err());
         assert_eq!(fs::read_dir(&base).unwrap().count(), 1);
