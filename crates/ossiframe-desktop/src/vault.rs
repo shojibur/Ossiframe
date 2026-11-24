@@ -16,6 +16,10 @@ pub trait SecretVault: Send + Sync {
     fn load(&self, entry_id: &str) -> Result<Option<SecretString>, VaultError>;
     /// Deleting an entry that does not exist succeeds.
     fn delete(&self, entry_id: &str) -> Result<(), VaultError>;
+    /// Keychain service name shown to users for manual cleanup.
+    fn service_name(&self) -> &str {
+        "ossiframe"
+    }
 }
 
 /// Native OS keychain through `keyring-core`. macOS uses the login keychain.
@@ -78,6 +82,10 @@ impl SecretVault for KeychainVault {
             Ok(()) | Err(keyring_core::Error::NoEntry) => Ok(()),
             Err(e) => Err(map_err(e)),
         }
+    }
+
+    fn service_name(&self) -> &str {
+        &self.service
     }
 }
 

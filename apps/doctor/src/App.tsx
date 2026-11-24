@@ -38,8 +38,16 @@ export function App() {
   const [errors, setErrors] = useState<Record<string, string | null>>({});
   const [globalError, setGlobalError] = useState<string | null>(null);
   const [dialog, setDialog] = useState<DialogState>({ type: "none" });
-  // A credential entered before a host key prompt, kept only until the retry.
-  const pending = useRef<{ credential: string; save: boolean } | null>(null);
+  // A credential entered before a host key prompt. It belongs to exactly one
+  // server and one trust token, lives only in memory, and is cleared whenever
+  // the flow ends, is abandoned or another attempt starts.
+  const pending = useRef<{ serverId: string; token: string; credential: string; save: boolean } | null>(null);
+  const [warnings, setWarnings] = useState<Record<string, string | null>>({});
+
+  const closeDialog = () => {
+    pending.current = null;
+    setDialog({ type: "none" });
+  };
 
   const setErr = (id: string, msg: string | null) => setErrors((e) => ({ ...e, [id]: msg }));
   const markStale = (id: string) =>
@@ -95,19 +103,23 @@ export function App() {
   }
 
   async function connect(id: string, credential: string | null = null, save = false) {
+    pending.current = null; // superseded by this attempt
     setBusy((m) => ({ ...m, [id]: true }));
     setErr(id, null);
+    setWarnings((w) => ({ ...w, [id]: null }));
     try {
       const r = await api.connectServer(id, credential, save);
       if (r.status === "connected") {
-        setDialog({ type: "none" });
+        closeDialog();
+        setWarnings((w) => ({ ...w, [id]: r.warning }));
         await refresh();
         void loadInfo(id);
       } else {
-        pending.current = credential ? { credential, save } : null;
+        pending.current = credential ? { serverId: id, token: r.token, credential, save } : null;
         setDialog({ type: "hostKey", serverId: id, token: r.token, keyType: r.keyType, sha256: r.sha256 });
       }
     } catch (e) {
+      pending.current = null;
       handleConnectError(id, toIpcError(e), credential !== null);
     } finally {
       setBusy((m) => ({ ...m, [id]: false }));
@@ -132,22 +144,21 @@ export function App() {
         error: null,
       });
     } else {
-      setDialog({ type: "none" });
+      closeDialog();
       setErr(id, errorMessage(err));
     }
   }
 
   async function trust(id: string, token: string) {
-    setDialog({ type: "none" });
+    const held = pending.current;
+    const p = held && held.serverId === id && held.token === token ? held : null;
+    closeDialog();
     try {
       await api.trustHostKey(id, token);
     } catch (e) {
-      pending.current = null;
       setErr(id, errorMessage(toIpcError(e)));
       return;
     }
-    const p = pending.current;
-    pending.current = null;
     await connect(id, p?.credential ?? null, p?.save ?? false);
   }
 
@@ -160,11 +171,11 @@ export function App() {
         setDialog((d) => (d.type === "changed" ? { ...d, error: errorMessage(err) } : d));
         return;
       }
-      setDialog({ type: "none" });
+      closeDialog();
       setErr(id, errorMessage(err));
       return;
     }
-    setDialog({ type: "none" });
+    closeDialog();
     await refresh();
     await connect(id);
   }
@@ -180,7 +191,7 @@ export function App() {
   }
 
   async function remove(id: string) {
-    setDialog({ type: "none" });
+    closeDialog();
     try {
       await api.removeServer(id);
       setInfos((m) => {
@@ -237,6 +248,7 @@ export function App() {
             busy={Boolean(busy[server.id])}
             loadingInfo={Boolean(loadingInfo[server.id])}
             error={errors[server.id] ?? null}
+            warning={warnings[server.id] ?? null}
             onConnect={() => void connect(server.id)}
             onDisconnect={() => void disconnect(server.id)}
             onRefresh={() => void loadInfo(server.id)}
@@ -256,9 +268,9 @@ export function App() {
           key={dialog.server?.id ?? "new"}
           open
           server={dialog.server}
-          onClose={() => setDialog({ type: "none" })}
+          onClose={() => closeDialog()}
           onSaved={(s) => {
-            setDialog({ type: "none" });
+            closeDialog();
             setSelected(s.id);
             if (s.state !== "connected") markStale(s.id);
             void refresh();
@@ -270,7 +282,7 @@ export function App() {
           server={dialogServer}
           kind={dialog.kind}
           error={dialog.error}
-          onCancel={() => setDialog({ type: "none" })}
+          onCancel={() => closeDialog()}
           onSubmit={(c, save) => void connect(dialog.serverId, c, save)}
         />
       )}
@@ -279,10 +291,7 @@ export function App() {
           server={dialogServer}
           keyType={dialog.keyType}
           sha256={dialog.sha256}
-          onCancel={() => {
-            pending.current = null;
-            setDialog({ type: "none" });
-          }}
+          onCancel={closeDialog}
           onTrust={() => void trust(dialog.serverId, dialog.token)}
         />
       )}
@@ -292,14 +301,14 @@ export function App() {
           pinned={dialog.pinned}
           presented={dialog.presented}
           error={dialog.error}
-          onClose={() => setDialog({ type: "none" })}
+          onClose={() => closeDialog()}
           onReplace={(h) => void replace(dialog.serverId, dialog.token, h)}
         />
       )}
       {dialog.type === "remove" && dialogServer && (
         <ConfirmRemoveDialog
           server={dialogServer}
-          onCancel={() => setDialog({ type: "none" })}
+          onCancel={() => closeDialog()}
           onConfirm={() => void remove(dialog.serverId)}
         />
       )}

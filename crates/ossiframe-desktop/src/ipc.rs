@@ -111,7 +111,9 @@ impl From<ServerView> for ServerDto {
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "status", rename_all = "camelCase")]
 pub enum ConnectOutcomeDto {
-    Connected,
+    Connected {
+        warning: Option<String>,
+    },
     #[serde(rename_all = "camelCase")]
     HostKeyUnknown {
         token: String,
@@ -123,7 +125,9 @@ pub enum ConnectOutcomeDto {
 impl From<ConnectOutcome> for ConnectOutcomeDto {
     fn from(o: ConnectOutcome) -> Self {
         match o {
-            ConnectOutcome::Connected => Self::Connected,
+            ConnectOutcome::Connected { warning } => Self::Connected {
+                warning: warning.map(|w| cap(&w)),
+            },
             ConnectOutcome::HostKeyUnknown { token, key } => Self::HostKeyUnknown {
                 token,
                 key_type: key.key_type,
@@ -156,6 +160,8 @@ pub enum IpcError {
     Unreachable { message: String },
     #[error("connection timed out")]
     ConnectTimeout,
+    #[error("authentication timed out")]
+    AuthTimeout,
     #[error("host key changed")]
     HostKeyMismatch {
         pinned_key_type: String,
@@ -253,6 +259,7 @@ impl From<ServiceError> for IpcError {
             ServiceError::Connect(c) => match c {
                 ConnectError::Unreachable(m) => IpcError::Unreachable { message: cap(&m) },
                 ConnectError::ConnectTimeout => IpcError::ConnectTimeout,
+                ConnectError::AuthTimeout => IpcError::AuthTimeout,
                 ConnectError::AuthFailed => IpcError::AuthFailed,
                 ConnectError::KeyFileUnreadable(p) => IpcError::KeyFileUnreadable { path: cap(&p) },
                 ConnectError::Protocol(m) => IpcError::Protocol { message: cap(&m) },

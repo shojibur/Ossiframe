@@ -66,7 +66,9 @@ pub struct ServerView {
 
 #[derive(Debug, Clone)]
 pub enum ConnectOutcome {
-    Connected,
+    /// `warning` reports a non-fatal problem, such as an old keychain entry
+    /// that could not be deleted.
+    Connected { warning: Option<String> },
     /// The server's key is not pinned yet. The user must compare the
     /// fingerprint and call `trust_host_key` with `token`.
     HostKeyUnknown {
@@ -197,8 +199,11 @@ impl ServerService {
 
     /// Edits a profile.
     /// - Name only: pin and session are kept.
-    /// - Host or port: session closed, pending approvals invalidated, pin cleared.
+    /// - Host or port: session closed, pending approvals invalidated, pin
+    ///   cleared and saved secret deleted.
     /// - User, auth kind or key path: saved secret deleted, session closed.
+    ///
+    /// A secret saved for one endpoint and login is never sent to another.
     pub async fn update(&self, id: &str, input: ProfileInput) -> Result<ServerView, ServiceError> {
         self.sessions.cancel_op(id);
         let guard = self.sessions.guard(id);
@@ -214,7 +219,7 @@ impl ServerService {
         rec.username = input.username;
         rec.auth = input.auth;
         rec.updated_at = now();
-        let obsolete_secret = if auth_changed {
+        let obsolete_secret = if auth_changed || endpoint_changed {
             rec.secret_ref.take()
         } else {
             None
@@ -271,7 +276,7 @@ impl ServerService {
         let guard = self.sessions.guard(id);
         let _g = guard.lock().await;
         if self.sessions.is_connected(id, &*self.events) {
-            return Ok(ConnectOutcome::Connected);
+            return Ok(ConnectOutcome::Connected { warning: None });
         }
         let rec = self.store.get(id)?;
         let pin = self.store.get_pin(id)?;
@@ -320,6 +325,7 @@ impl ServerService {
             }
         };
 
+        let mut warning = None;
         if save && let Some(c) = &entered {
             let entry = uuid::Uuid::new_v4().to_string();
             if let Err(e) = self.vault.save(&entry, c) {
@@ -329,15 +335,32 @@ impl ServerService {
                     "authenticated, but saving to the keychain failed, so nothing was saved and the session was closed. Connect without saving or unlock the keychain. ({e})"
                 )));
             }
-            self.store.set_secret_ref(id, Some(&entry))?;
-            if let Some(old) = &rec.secret_ref {
-                let _ = self.vault.delete(old);
+            if let Err(e) = self.store.set_secret_ref(id, Some(&entry)) {
+                // Compensate: the profile keeps its previous reference.
+                let cleanup = self.vault.delete(&entry);
+                conn.close().await;
+                self.events.state_changed(id, ConnState::Error);
+                let detail = match cleanup {
+                    Ok(()) => "the new keychain entry was removed".to_owned(),
+                    Err(v) => format!("the new keychain entry could not be removed ({v})"),
+                };
+                return Err(ServiceError::Storage(format!(
+                    "authenticated, but the saved secret could not be recorded locally; {detail} and the session was closed. Try again or connect without saving. ({e})"
+                )));
+            }
+            if let Some(old) = &rec.secret_ref
+                && let Err(e) = self.vault.delete(old)
+            {
+                warning = Some(format!(
+                    "The new secret was saved, but the previous keychain entry could not be deleted. You can remove it in Keychain Access (service {}). ({e})",
+                    self.keychain_service_hint()
+                ));
             }
         }
 
         self.sessions.insert(id, conn);
         self.events.state_changed(id, ConnState::Connected);
-        Ok(ConnectOutcome::Connected)
+        Ok(ConnectOutcome::Connected { warning })
     }
 
     fn connect_failure(
@@ -427,6 +450,10 @@ impl ServerService {
         self.sessions.close(id).await;
         self.events.state_changed(id, ConnState::Disconnected);
         Ok(())
+    }
+
+    fn keychain_service_hint(&self) -> &str {
+        self.vault.service_name()
     }
 
     /// Cancels the running operation for a profile, if any.
@@ -619,6 +646,10 @@ mod tests {
             .await
             .unwrap();
         assert!(v.pin.is_none(), "pin cleared on host change");
+        assert!(
+            v.record.secret_ref.is_none(),
+            "secret not carried to new host"
+        );
         assert!(matches!(
             svc.replace_host_key(&id, &replace_token, "new.example.com")
                 .await,
@@ -742,6 +773,35 @@ mod tests {
         assert!(v.record.secret_ref.is_none() && v.pin.is_some());
         assert!(vault.is_empty());
         assert_eq!(v.state, ConnState::Disconnected);
+    }
+
+    #[tokio::test]
+    async fn endpoint_change_never_reuses_saved_secret() {
+        let (svc, vault, c) = setup();
+        let id = svc
+            .add(input("example.com", AuthConfig::Password))
+            .unwrap()
+            .record
+            .id;
+        svc.connect(&id, secret("old-host-pw"), true).await.unwrap();
+        assert_eq!(vault.len(), 1);
+
+        let mut i = input("example.com", AuthConfig::Password);
+        i.port = Port::new(2222).unwrap();
+        let v = svc.update(&id, i).await.unwrap();
+        assert!(v.record.secret_ref.is_none());
+        assert!(vault.is_empty(), "old secret deleted");
+        assert_eq!(v.state, ConnState::Disconnected);
+
+        c.push(Err(ConnectError::PasswordRequired));
+        assert_eq!(
+            svc.connect(&id, None, false).await.unwrap_err(),
+            ServiceError::CredentialRequired(CredentialKind::Password)
+        );
+        assert!(
+            c.seen_secrets.lock().unwrap().last().unwrap().is_none(),
+            "nothing sent to the new endpoint"
+        );
     }
 
     #[tokio::test]

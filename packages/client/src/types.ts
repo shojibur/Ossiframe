@@ -32,7 +32,7 @@ export interface ProfileInput {
 }
 
 export type ConnectOutcome =
-  | { status: "connected" }
+  | { status: "connected"; warning: string | null }
   | { status: "hostKeyUnknown"; token: string; keyType: string; sha256: string };
 
 export type CredentialKind = "password" | "passphrase";
@@ -42,6 +42,7 @@ export type IpcError =
   | { kind: "notFound" }
   | { kind: "unreachable"; message: string }
   | { kind: "connectTimeout" }
+  | { kind: "authTimeout" }
   | {
       kind: "hostKeyMismatch";
       pinnedKeyType: string;

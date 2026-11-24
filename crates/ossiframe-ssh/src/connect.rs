@@ -26,6 +26,8 @@ pub enum AuthMethod {
 #[derive(Debug, Clone)]
 pub struct ConnectOptions {
     pub connect_timeout: Duration,
+    /// Overall limit for authentication after the handshake.
+    pub auth_timeout: Duration,
     /// Send a keepalive after this long without traffic from the server.
     pub keepalive_interval: Duration,
     /// Close the connection after this many unanswered keepalives.
@@ -36,6 +38,7 @@ impl Default for ConnectOptions {
     fn default() -> Self {
         Self {
             connect_timeout: Duration::from_secs(15),
+            auth_timeout: Duration::from_secs(30),
             keepalive_interval: Duration::from_secs(15),
             keepalive_max: 3,
         }
@@ -57,6 +60,8 @@ pub enum ConnectError {
     },
     #[error("authentication failed")]
     AuthFailed,
+    #[error("authentication timed out")]
+    AuthTimeout,
     #[error("the private key is encrypted and needs a passphrase")]
     PassphraseRequired,
     #[error("a password is required")]
@@ -193,34 +198,53 @@ pub async fn connect(
             Ok(Ok(h)) => h,
         };
 
-    // From here the host key is trusted.
+    // From here the host key is trusted. Authentication is bounded by one
+    // overall deadline; on any failure the connection is closed.
+    let result =
+        tokio::time::timeout(opts.auth_timeout, authenticate(&mut handle, target, auth)).await;
+    match result {
+        Ok(Ok(())) => Ok(SshExecutor::new(handle)),
+        Ok(Err(e)) => {
+            close_handle(&handle).await;
+            Err(e)
+        }
+        Err(_) => {
+            close_handle(&handle).await;
+            Err(ConnectError::AuthTimeout)
+        }
+    }
+}
+
+/// Upper bound for sending a disconnect during cleanup.
+pub(crate) const CLEANUP_TIMEOUT: Duration = Duration::from_secs(2);
+
+pub(crate) async fn close_handle(handle: &client::Handle<HostKeyHandler>) {
+    let _ = tokio::time::timeout(
+        CLEANUP_TIMEOUT,
+        handle.disconnect(russh::Disconnect::ByApplication, "", "en"),
+    )
+    .await;
+}
+
+async fn authenticate(
+    handle: &mut client::Handle<HostKeyHandler>,
+    target: &ConnectTarget,
+    auth: &AuthMethod,
+) -> Result<(), ConnectError> {
     let user = target.user.as_str();
-    let auth_result = match auth {
+    let result = match auth {
         AuthMethod::Password(pw) => {
             if pw.is_empty() {
-                let _ = handle
-                    .disconnect(russh::Disconnect::ByApplication, "", "en")
-                    .await;
                 return Err(ConnectError::PasswordRequired);
             }
             handle.authenticate_password(user, pw.expose()).await
         }
         AuthMethod::KeyFile { path, passphrase } => {
-            let key = match load_key(path, passphrase.as_ref()) {
-                Ok(k) => k,
-                Err(e) => {
-                    let _ = handle
-                        .disconnect(russh::Disconnect::ByApplication, "", "en")
-                        .await;
-                    return Err(e);
-                }
-            };
+            let key = load_key(path, passphrase.as_ref())?;
             let hash = if key.algorithm().is_rsa() {
-                match tokio::time::timeout(Duration::from_secs(5), handle.best_supported_rsa_hash())
-                    .await
-                {
-                    Ok(Ok(h)) => h.flatten(),
-                    _ => Some(HashAlg::Sha256),
+                match handle.best_supported_rsa_hash().await {
+                    Ok(h) => h.flatten(),
+                    Err(_) => Some(HashAlg::Sha256),
                 }
             } else {
                 None
@@ -230,15 +254,10 @@ pub async fn connect(
                 .await
         }
     };
-
-    match auth_result {
-        Ok(r) if r.success() => Ok(SshExecutor::new(handle)),
-        Ok(_) => {
-            let _ = handle
-                .disconnect(russh::Disconnect::ByApplication, "", "en")
-                .await;
-            Err(ConnectError::AuthFailed)
-        }
+    match result {
+        Ok(r) if r.success() => Ok(()),
+        Ok(_) => Err(ConnectError::AuthFailed),
+        // russh errors describe protocol state, not credentials.
         Err(e) => Err(ConnectError::Protocol(short(&e.to_string()))),
     }
 }
@@ -360,6 +379,16 @@ mod tests {
             load_key(&p, None).unwrap_err(),
             ConnectError::KeyFileUnreadable("/nonexistent/ossiframe/id".into())
         );
+    }
+
+    #[test]
+    fn auth_method_debug_hides_secrets() {
+        let pw = AuthMethod::Password(SecretString::new("hunter2-pw".into()));
+        let key = AuthMethod::KeyFile {
+            path: KeyPath::parse("/k").unwrap(),
+            passphrase: Some(SecretString::new("hunter2-pp".into())),
+        };
+        assert!(!format!("{pw:?}{key:?}").contains("hunter2"));
     }
 
     #[test]

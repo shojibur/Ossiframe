@@ -35,6 +35,8 @@ export function errorMessage(e: IpcError): string {
       return "The connection timed out. Check the host, port and network.";
     case "hostKeyMismatch":
       return "The server's host key has changed. The connection was blocked.";
+    case "authTimeout":
+      return "Authentication timed out. The connection was closed.";
     case "authFailed":
       return "Authentication failed.";
     case "credentialRequired":

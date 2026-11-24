@@ -8,7 +8,7 @@ import type { ConnState, ConnectOutcome, IpcError, ProfileInput, Server, ServerI
 export * from "./types";
 
 const KINDS = new Set([
-  "validation", "notFound", "unreachable", "connectTimeout", "hostKeyMismatch", "authFailed",
+  "validation", "notFound", "unreachable", "connectTimeout", "authTimeout", "hostKeyMismatch", "authFailed",
   "credentialRequired", "keyFileUnreadable", "notConnected", "commandTimeout", "cancelled",
   "connectionLost", "keychain", "storage", "hostKeyApproval", "alreadyPinned",
   "confirmationMismatch", "protocol", "internal",

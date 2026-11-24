@@ -59,6 +59,7 @@ interface Props {
   busy: boolean;
   loadingInfo: boolean;
   error: string | null;
+  warning: string | null;
   onConnect: () => void;
   onDisconnect: () => void;
   onRefresh: () => void;
@@ -108,6 +109,7 @@ export function Overview(p: Props) {
       </header>
 
       {p.error && <Notice tone="error">{p.error}</Notice>}
+      {p.warning && <Notice tone="warn">{p.warning}</Notice>}
 
       <div className="text-xs text-slate-500">
         Pinned host key:{" "}
