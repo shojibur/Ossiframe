@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-build-report"
+description = "Enables the build_report command without any pre-configured scope."
+commands.allow = ["build_report"]
+
+[[permission]]
+identifier = "deny-build-report"
+description = "Denies the build_report command without any pre-configured scope."
+commands.deny = ["build_report"]

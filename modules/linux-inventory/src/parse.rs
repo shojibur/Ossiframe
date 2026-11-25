@@ -116,6 +116,122 @@ pub fn df_root(s: &str) -> Option<DiskInfo> {
     })
 }
 
+/// Most filesystems kept from `df`.
+pub const MAX_FILESYSTEMS: usize = 50;
+
+fn is_snap_mount(mount: &str) -> bool {
+    mount == "/snap"
+        || mount.starts_with("/snap/")
+        || mount == "/var/lib/snapd/snap"
+        || mount.starts_with("/var/lib/snapd/snap/")
+}
+
+/// Parses `df -P -B1` output into meaningful filesystems. Zero-size entries
+/// and snap mounts are dropped, and unparsable lines are skipped. Returns at
+/// most [`MAX_FILESYSTEMS`] entries and whether more were dropped. `None` when
+/// the header is missing.
+pub fn df_all(s: &str) -> Option<(Vec<DiskInfo>, bool)> {
+    let mut lines = bounded(s).lines();
+    if !lines.next()?.starts_with("Filesystem") {
+        return None;
+    }
+    let mut out = Vec::new();
+    let mut truncated = false;
+    for line in lines {
+        let cols: Vec<&str> = line.split_whitespace().collect();
+        // Find "<total> <used> <avail> <NN%>"; the mount point is the rest
+        // and may contain spaces.
+        let Some(pct) = (3..cols.len()).find(|&i| {
+            cols[i].ends_with('%') && cols[i - 3..i].iter().all(|c| c.parse::<u64>().is_ok())
+        }) else {
+            continue;
+        };
+        let (Ok(total), Ok(used), Ok(avail)) = (
+            cols[pct - 3].parse::<u64>(),
+            cols[pct - 2].parse::<u64>(),
+            cols[pct - 1].parse::<u64>(),
+        ) else {
+            continue;
+        };
+        let Some(mount) = field(&cols[pct + 1..].join(" ")) else {
+            continue;
+        };
+        if total == 0 || is_snap_mount(&mount) {
+            continue;
+        }
+        if out.len() >= MAX_FILESYSTEMS {
+            truncated = true;
+            break;
+        }
+        out.push(DiskInfo {
+            mount,
+            total_bytes: total,
+            used_bytes: used,
+            available_bytes: avail,
+        });
+    }
+    Some((out, truncated))
+}
+
+/// Returns (SwapTotal, SwapFree) in kB. `None` if neither is present.
+pub fn swap(s: &str) -> Option<(Option<u64>, Option<u64>)> {
+    let mut total = None;
+    let mut free = None;
+    for line in bounded(s).lines() {
+        let Some((k, v)) = line.split_once(':') else {
+            continue;
+        };
+        let num = v
+            .split_whitespace()
+            .next()
+            .and_then(|n| n.parse::<u64>().ok());
+        match k.trim() {
+            "SwapTotal" => total = num,
+            "SwapFree" => free = num,
+            _ => {}
+        }
+    }
+    if total.is_none() && free.is_none() {
+        None
+    } else {
+        Some((total, free))
+    }
+}
+
+/// Aggregate CPU counters from the first `cpu` line of `/proc/stat`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CpuSample {
+    pub total: u64,
+    pub idle: u64,
+}
+
+/// Parses the aggregate `cpu ` line. `total` is user..steal (guest time is
+/// already part of user/nice); `idle` is idle + iowait.
+pub fn proc_stat_cpu(s: &str) -> Option<CpuSample> {
+    let line = bounded(s).lines().find(|l| l.starts_with("cpu "))?;
+    let nums: Vec<u64> = line
+        .split_whitespace()
+        .skip(1)
+        .take(8)
+        .map(|n| n.parse().ok())
+        .collect::<Option<_>>()?;
+    if nums.len() < 4 {
+        return None;
+    }
+    let total = nums.iter().try_fold(0u64, |a, n| a.checked_add(*n))?;
+    let idle = nums[3].checked_add(nums.get(4).copied().unwrap_or(0))?;
+    Some(CpuSample { total, idle })
+}
+
+/// CPU busy percent (0 to 100, one decimal) between two samples. `None` when
+/// the counters did not advance or went backwards.
+pub fn cpu_usage(a: CpuSample, b: CpuSample) -> Option<f64> {
+    let dt = b.total.checked_sub(a.total).filter(|d| *d > 0)?;
+    let di = b.idle.checked_sub(a.idle)?;
+    let busy = dt.checked_sub(di)?;
+    Some((busy as f64 / dt as f64 * 1000.0).round() / 10.0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -170,5 +286,63 @@ mod tests {
             Some("[31mred")
         );
         assert!(first_line(&"é".repeat(100_000)).unwrap().chars().count() <= MAX_FIELD);
+    }
+
+    #[test]
+    fn df_all_filters_and_bounds() {
+        let df = "Filesystem 1-blocks Used Available Capacity Mounted on\n\
+/dev/vda1 100 40 60 40% /\n\
+/dev/loop0 128 128 0 100% /snap/core/1\n\
+none 0 0 0 - /sys/fs/x\n\
+/dev/vdb 50 10 40 20% /mnt/my disk\n\
+bad line here\n";
+        let (v, t) = df_all(df).unwrap();
+        assert!(!t);
+        let mounts: Vec<_> = v.iter().map(|d| d.mount.as_str()).collect();
+        assert_eq!(mounts, ["/", "/mnt/my disk"]);
+        let mut many = String::from("Filesystem 1-blocks Used Available Capacity Mounted on\n");
+        for i in 0..60 {
+            many.push_str(&format!("/dev/x{i} 10 1 9 10% /m{i}\n"));
+        }
+        let (v, t) = df_all(&many).unwrap();
+        assert_eq!(v.len(), MAX_FILESYSTEMS);
+        assert!(t);
+        assert!(df_all("").is_none() && df_all("garbage\n1 2 3 4% /").is_none());
+    }
+
+    #[test]
+    fn swap_parsing() {
+        assert_eq!(
+            swap("MemTotal: 1 kB\nSwapTotal: 2097148 kB\nSwapFree: 2000000 kB\n"),
+            Some((Some(2097148), Some(2000000)))
+        );
+        assert_eq!(
+            swap("SwapTotal: 0 kB\nSwapFree: 0 kB"),
+            Some((Some(0), Some(0)))
+        );
+        assert!(swap("MemTotal: 1 kB\nSwapTotal: x kB").is_none());
+        assert!(swap("").is_none() && swap("::::").is_none());
+    }
+
+    #[test]
+    fn cpu_delta() {
+        let a = proc_stat_cpu("cpu  100 0 100 700 100 0 0 0 0 0\ncpu0 1 2 3 4\n").unwrap();
+        assert_eq!(
+            a,
+            CpuSample {
+                total: 1000,
+                idle: 800
+            }
+        );
+        let b = proc_stat_cpu("cpu  150 0 150 750 150 0 0 0 0 0\n").unwrap();
+        // delta total 200, idle 100 -> 50% busy
+        assert_eq!(cpu_usage(a, b), Some(50.0));
+        assert_eq!(cpu_usage(a, a), None, "zero delta");
+        assert_eq!(cpu_usage(b, a), None, "counters went backwards");
+        assert!(proc_stat_cpu("").is_none());
+        assert!(proc_stat_cpu("cpu0 1 2 3 4\n").is_none());
+        assert!(proc_stat_cpu("cpu  1 2 x 4\n").is_none());
+        assert!(proc_stat_cpu("cpu  1 2 3\n").is_none());
+        assert!(proc_stat_cpu("cpu  18446744073709551615 1 0 0\n").is_none());
     }
 }

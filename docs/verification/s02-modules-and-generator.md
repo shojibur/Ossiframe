@@ -38,7 +38,7 @@ Not yet verified: a runtime IPC call from the launched app to a moved command. T
 
 ## Doctor after migration (task 6.3)
 
-Date: 2026-11-24. Release binary `target/release/ossiframe-doctor`, run by the user against the Lightsail server `54.179.76.25`.
+Date: 2026-11-24. Release binary `target/release/ossiframe-doctor`, run by the user against the Lightsail server `<server-ip>`.
 
 User-confirmed observations:
 - The existing profile and pinned fingerprint were kept.
@@ -48,7 +48,7 @@ User-confirmed observations:
 
 ## Generated apps (local mode)
 
-**Scope:** these are Local_Mode builds (`--ossiframe-local /Users/shojibur/Desktop/kiro/Ossiframe`, dirty working tree). They are NOT the public-rev independent verification (task 14). Standalone_Mode from a Published_Rev remains unverified. No server was contacted in this step; running the apps against the Lightsail server is task 13.2 (manual).
+**Scope:** these are Local_Mode builds (`--ossiframe-local <home>/Desktop/kiro/Ossiframe`, dirty working tree). They are NOT the public-rev independent verification (task 14). Standalone_Mode from a Published_Rev remains unverified. No server was contacted in this step; running the apps against the Lightsail server is task 13.2 (manual).
 
 Fresh copies were generated from the current code (`~/ossiframe-gen-test` deleted first), then `pnpm install` and the full bundle `pnpm tauri build` ran in each:
 
@@ -58,8 +58,8 @@ Fresh copies were generated from the current code (`~/ossiframe-gen-test` delete
 | full (`Ossi Full`) | `--modules linux-inventory --with-example-module` | `com.example.ossifull` | build OK, `.app` and `.dmg` bundled |
 
 Built bundles:
-- `/Users/shojibur/ossiframe-gen-test/minimal/src-tauri/target/release/bundle/macos/Ossi Minimal.app`
-- `/Users/shojibur/ossiframe-gen-test/full/src-tauri/target/release/bundle/macos/Ossi Full.app`
+- `<home>/ossiframe-gen-test/minimal/src-tauri/target/release/bundle/macos/Ossi Minimal.app`
+- `<home>/ossiframe-gen-test/full/src-tauri/target/release/bundle/macos/Ossi Full.app`
 
 Checks (grep and listing of the generated trees):
 - **Monorepo references:** in `Cargo.toml`, `package.json`, `vite.config.ts`, `tsconfig*.json`, `pnpm-workspace.yaml`, `packages/*/package.json` and `tauri.conf.json`, the only references to the checkout are the local-mode path dependencies in `src-tauri/Cargo.toml` (`ossiframe-core`, `ossiframe-desktop`, and in full also `ossiframe-mod-linux-inventory`) and `modules/ports/Cargo.toml` (`ossiframe-core`). The full app's `ossiframe-mod-ports-example` is `path = "../modules/ports"` inside the app. `modules/ports/Cargo.toml` also carries the public repository URL as `repository` metadata only. No `[patch]` and no git source in `Cargo.lock` (0 matches). No `dev.ossiframe`, `ossiframe-doctor` or `doctor.sqlite` strings in either tree (excluding `node_modules`, `target`, `dist`, lockfiles).
@@ -73,7 +73,7 @@ Not verified here: running either app, connecting to a server, Standalone_Mode.
 ## Generated apps and Doctor on the Lightsail server (task 13.2)
 **Scope:** manual check by the user on 2026-11-24, reported as "All passed" for A, B and C. The generated apps are Local_Mode builds (`--ossiframe-local`, dirty working tree). Public-rev (Standalone_Mode) verification is still pending (task 14).
 
-Server: `54.179.76.25:22`, user `ubuntu`, key `~/.ssh/ossiframe.pem`.
+Server: `<server-ip>:22`, user `ubuntu`, key `<key-path>`.
 
 | App | Identifier | Result |
 |---|---|---|
@@ -94,13 +94,13 @@ Not collected. The agent's sandbox blocked the `ssh-keyscan` call that was neede
 Rev 3ebdfc1e4db310dda643fa6c439d709e6b5876a6 (contains the Cargo.toml.tmpl fix) is pushed to `origin/main`. The tree was clean, default `~/.cargo` (CARGO_HOME unset). No server was contacted.
 
 - Generated without `--rev` into `~/ossiframe-public-test/app2` (`--name "Ossi Public" --identifier com.example.ossipublic2 --modules linux-inventory --with-example-module`). The generator pinned 3ebdfc1e… in `src-tauri/Cargo.toml`.
-- No occurrence of `/Users/shojibur/Desktop/kiro/Ossiframe` in the generated project (excluding `node_modules` and `target`).
+- No occurrence of `<home>/Desktop/kiro/Ossiframe` in the generated project (excluding `node_modules` and `target`).
 - `pnpm install`, `pnpm typecheck`, `pnpm lint`: passed.
 - `pnpm tauri build` (full bundle): passed, exit 0. The earlier `invalid key-value pair` Cargo message did not appear (0 matches in the build log).
 - `Cargo.lock`: ossiframe-core, -desktop, -ssh and -mod-linux-inventory all resolve to `git+https://github.com/shojibur/Ossiframe?rev=3ebdfc1e…#3ebdfc1e…`.
 - `cargo test` in `src-tauri`: 2 passed, 0 failed.
 - App: `~/ossiframe-public-test/app2/src-tauri/target/release/bundle/macos/Ossi Public.app` (also a `.dmg` in `bundle/dmg/`).
-- Running this app against the server (user, 2026-11-25): the user ran `Ossi Public.app` (identifier `com.example.ossipublic2`, built in Standalone_Mode purely from public rev 3ebdfc1e4db310dda643fa6c439d709e6b5876a6 with `Cargo.lock` git sources) against the Lightsail server `54.179.76.25`. The user added the profile and connected. The fingerprint shown matched `ssh-ed25519 SHA256:qobMUOP//FiL3rW2mD42syTV5iK5BzW0Dw9Rylibswk`. Overview showed real inventory and Ports showed listening ports. The user reported "Worked". The specific ports were not itemized and not compared with `ss -Htln`.
+- Running this app against the server (user, 2026-11-25): the user ran `Ossi Public.app` (identifier `com.example.ossipublic2`, built in Standalone_Mode purely from public rev 3ebdfc1e4db310dda643fa6c439d709e6b5876a6 with `Cargo.lock` git sources) against the Lightsail server `<server-ip>`. The user added the profile and connected. The fingerprint shown matched `ssh-ed25519 SHA256:qobMUOP//FiL3rW2mD42syTV5iK5BzW0Dw9Rylibswk`. Overview showed real inventory and Ports showed listening ports. The user reported "Worked". The specific ports were not itemized and not compared with `ss -Htln`.
 
 ## Standalone mode from the published rev (task 14.2)
 **Published_Rev:** `4c8857e444edf60f1274ddf352bd6fcd0007feb1` (`origin/main` = `4c8857e`).
@@ -111,7 +111,7 @@ Rev 3ebdfc1e4db310dda643fa6c439d709e6b5876a6 (contains the Cargo.toml.tmpl fix) 
 `cargo run -p ossiframe-cli -- new ~/ossiframe-public-test/app --name "Ossi Public" --identifier com.example.ossipublic --modules linux-inventory --with-example-module --rev 4c8857e444edf60f1274ddf352bd6fcd0007feb1`
 The earlier test directory was moved aside to `~/ossiframe-public-test.old-*` rather than deleted. The generator succeeded. A second invocation correctly refused: `dir: exists and is not empty; refusing to write into it`.
 
-**Independence:** grepping the generated `Cargo.toml`, `package.json`, `vite.config.ts`, `tsconfig*` and `src-tauri/Cargo.lock` for `/Users/shojibur/Desktop/kiro/Ossiframe` found nothing. `src-tauri/Cargo.toml` has git dependencies on the rev for `ossiframe-core`, `ossiframe-desktop` and `ossiframe-mod-linux-inventory`, and `ossiframe-mod-ports-example = { path = "../modules/ports" }`.
+**Independence:** grepping the generated `Cargo.toml`, `package.json`, `vite.config.ts`, `tsconfig*` and `src-tauri/Cargo.lock` for `<home>/Desktop/kiro/Ossiframe` found nothing. `src-tauri/Cargo.toml` has git dependencies on the rev for `ossiframe-core`, `ossiframe-desktop` and `ossiframe-mod-linux-inventory`, and `ossiframe-mod-ports-example = { path = "../modules/ports" }`.
 
 `src-tauri/Cargo.lock` sources (all four resolve to the public rev):
 ```

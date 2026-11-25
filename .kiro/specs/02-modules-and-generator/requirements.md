@@ -28,7 +28,7 @@ Testing is limited to small plain unit tests for high-risk logic, plus manual ve
 - **Generator**: The `ossiframe-cli` tool, command `new`.
 - **Generated_App**: An application produced by Generator.
 - **Ports_Module**: The `ossiframe-mod-ports-example` Module (id `ports`) in `examples/custom-module/`.
-- **Lightsail_Server**: The disposable Ubuntu 24.04 server the user named for verification (`54.179.76.25`, user `ubuntu`).
+- **Lightsail_Server**: The disposable Ubuntu 24.04 server the user named for verification (`<server-ip>`, user `ubuntu`).
 - **Published_Rev**: A Git commit that exists on the public remote `https://github.com/shojibur/Ossiframe`. A dirty or unpushed local checkout is not a Published_Rev.
 - **Local_Mode**: Generated_App built with `--ossiframe-local` (plain Cargo `path` dependencies on a local checkout, no git source), for development only.
 - **Standalone_Mode**: Generated_App built from a Published_Rev with no monorepo checkout.

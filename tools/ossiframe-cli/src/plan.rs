@@ -41,6 +41,14 @@ pub fn catalog() -> Vec<CatalogEntry> {
             is_example: false,
         },
         CatalogEntry {
+            manifest: ossiframe_mod_linux_audit::LinuxAudit.manifest(),
+            crate_name: "ossiframe-mod-linux-audit",
+            type_path: "ossiframe_mod_linux_audit::LinuxAudit",
+            crate_dir: "modules/linux-audit",
+            ui_dir: None,
+            is_example: false,
+        },
+        CatalogEntry {
             manifest: ossiframe_mod_ports_example::Ports.manifest(),
             crate_name: "ossiframe-mod-ports-example",
             type_path: "ossiframe_mod_ports_example::Ports",
@@ -237,6 +245,13 @@ mod tests {
         assert_eq!(m[0].ui_alias, "ui_linux_inventory");
         let m = resolve_modules(&catalog(), &[], true).unwrap();
         assert_eq!(ids(&m), ["ports"]);
+    }
+
+    #[test]
+    fn linux_audit_resolves_with_its_dependency_in_order() {
+        let m = resolve_modules(&catalog(), &[id("linux-audit")], false).unwrap();
+        assert_eq!(ids(&m), ["linux-inventory", "linux-audit"]);
+        assert!(m[1].entry.ui_dir.is_none());
     }
 
     #[test]

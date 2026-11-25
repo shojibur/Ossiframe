@@ -43,3 +43,7 @@ The `ossiframe-*` crates in `src-tauri/Cargo.toml` come from one of two sources.
 - **Local:** the app was generated with a local Ossiframe checkout. Plain `path =` dependencies point at that checkout. Use this for local testing only. Switch to a public `rev` before you share or release the app, because the paths only exist on your machine. A successful local build does not prove the standalone build works.
 
 `@ossiframe/ui` and `@ossiframe/client` are copied into `packages/` in both modes and are not published to npm.
+
+## License
+
+`OSSIFRAME-LICENSE` at the project root holds the MIT license for the Ossiframe source copied into this project and lists the copied directories. Keep it when you distribute the app. The license of your own code is your choice.

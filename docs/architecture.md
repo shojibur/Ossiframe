@@ -15,7 +15,7 @@ flowchart TB
     Inv["linux-inventory"]
     Prov["ubuntu-provisioning, nginx, php, mysql"]
     Lar["laravel"]
-    Aud["auditing"]
+    Aud["linux-audit"]
     Ex["custom module example"]
   end
   subgraph Core["Skeleton"]
@@ -26,6 +26,7 @@ flowchart TB
   end
   Deploy --> Inv & Prov & Lar
   Doctor --> Inv & Aud
+  Aud --> Inv
   Gen --> Inv & Ex
   Modules --> C
   Apps --> D & UI
@@ -56,7 +57,7 @@ The module manifest is metadata. Security boundaries are enforced by the executo
 
 ## Applications
 
-Every app has the same shape: a React frontend in `src/`, a Tauri backend in `src-tauri/` that lists its modules, and its own build. Deploy uses inventory, provisioning, hosting and Laravel modules. Doctor uses inventory and auditing modules. It is read-only because its IPC exposes only typed discovery operations built from predefined commands; the frontend cannot supply programs, shell commands, file paths or privileged operations. Trusted compiled Rust code is not sandboxed from its own process privileges.
+Every app has the same shape: a React frontend in `src/`, a Tauri backend in `src-tauri/` that lists its modules, and its own build. Deploy uses inventory, provisioning, hosting and Laravel modules. Doctor uses the `linux-inventory` and `linux-audit` modules; `linux-audit` declares `linux-inventory` as a dependency. It is read-only because its IPC exposes only typed discovery operations built from predefined commands; the frontend cannot supply programs, shell commands, file paths or privileged operations. Trusted compiled Rust code is not sandboxed from its own process privileges.
 
 ## SSH communication
 

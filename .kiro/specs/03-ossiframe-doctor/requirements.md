@@ -13,7 +13,10 @@ S03 turns the existing Doctor shell (`apps/doctor`) into a read-only diagnostics
 - **Step**: One Audit_Module operation (`resources`, `services`, `network`, `software`, `ssh`, `firewall`, `updates`, `certificates`), run with `null` arguments.
 - **Scan**: A sequential run of all Steps for one connected server.
 - **Check_Result**: One rule outcome with fields `ruleId`, `title`, `category`, `outcome`, `severity`, `resource`, `evidence`, `explanation`, `recommendation`, `observedAt`, `limitations`, `inferred`.
-- **Outcome**: One of `passed`, `finding`, `unavailable`, `notApplicable`, `error`.
+- **Outcome**: One of `passed`, `finding`, `unavailable`, `incomplete`, `notApplicable`, `error`. `incomplete` means evidence was partly collected (truncated, skipped or limited) so the check cannot pass; `unavailable` means no usable evidence.
+- **Scan_Status**: Execution state of a Scan: `complete` (every Step ran to the end) or `incomplete` (cancelled, aborted or a Step failed).
+- **Coverage**: Counts of Check_Results that were assessed (`passed`, `finding`), not assessed (`unavailable`, `incomplete`, `error`) and `notApplicable`. Coverage is independent of Scan_Status.
+- **Scan_Id**: A per-server, monotonically increasing number that identifies one Scan.
 - **Severity**: One of `critical`, `high`, `medium`, `low`, `info`.
 - **Binding_Class**: Classification of a listening address as `loopback`, `wildcard` or `specific`.
 - **Report_Builder**: The pure report functions in `linux-audit::report`.
@@ -31,13 +34,15 @@ S03 turns the existing Doctor shell (`apps/doctor`) into a read-only diagnostics
 #### Acceptance Criteria
 
 1. WHEN the Generator creates a project that contains copied Ossiframe source, THE Generator SHALL write an `OSSIFRAME-LICENSE` file at the project root containing the MIT text and copyright line from the repository `LICENSE`.
-2. THE `OSSIFRAME-LICENSE` file SHALL name the copied directories.
+2. THE `OSSIFRAME-LICENSE` file SHALL name every copied Ossiframe directory: the shared packages (`packages/ui`, `packages/client`), every copied module UI directory (for example `src/modules/linux-inventory` and `src/modules/ports`) and every copied module crate (for example `modules/ports`). THE Generator SHALL derive this list from the generation plan and not from a fixed example.
 3. THE Generator SHALL leave the license of the developer's own application unchanged.
 4. THE starter template README SHALL mention the `OSSIFRAME-LICENSE` file.
 5. THE `docs/developer-guide.md` SHALL state that an explicit `--rev` must be compatible with the current Generator, frontend packages and starter template.
 6. THE tracked `docs/verification/*.md` files and any other tracked public document found by search SHALL contain `<server-ip>` in place of server IP addresses, `<key-path>` in place of SSH key paths, and `<home>/...` in place of personal home paths.
 7. THE sanitized verification documents SHALL retain their observations and results.
 8. THE `docs/roadmap.md` risk table SHALL state that unsigned-macOS keychain behavior is not yet verified.
+9. THE sanitization SHALL NOT change recorded observations into new claims, SHALL NOT fabricate evidence, and SHALL NOT rewrite git history.
+10. THE maintenance task SHALL also fix other documentation inconsistencies it finds in the files it edits, and SHALL list each fix in its task notes.
 
 ### Requirement 2: Extended server information
 
@@ -49,8 +54,9 @@ S03 turns the existing Doctor shell (`apps/doctor`) into a read-only diagnostics
 2. THE Inventory_Module SHALL derive `rootFs` from `filesystems`.
 3. WHEN `server-info` runs, THE Inventory_Module SHALL compute `cpuUsagePercent` from two `/proc/stat` samples taken 1 second apart, with a cancel-aware wait between them.
 4. IF either `/proc/stat` sample is missing or unparsable, or the total delta is zero, THEN THE Inventory_Module SHALL return `null` for `cpuUsagePercent`.
-5. THE Inventory_Module SHALL list at most 50 filesystems and SHALL add a limitation string WHEN the list is truncated.
+5. THE Inventory_Module SHALL list at most 50 filesystems, SHALL set `filesystemsTruncated` and SHALL add a limitation string WHEN the list is truncated.
 6. IF a `server-info` command times out after 10 seconds, THEN THE Inventory_Module SHALL return an error result for that command without returning raw output.
+7. THE Inventory_Module SHALL list only meaningful filesystems: it SHALL exclude `tmpfs`, `devtmpfs`, `squashfs`, `overlay`, `efivarfs`, `proc`, `sysfs`, `cgroup2`, `devpts` and `ramfs` types, zero-size filesystems and mounts under `/snap/` or `/var/lib/snapd/snap/`.
 
 ### Requirement 3: Service discovery
 
@@ -58,10 +64,12 @@ S03 turns the existing Doctor shell (`apps/doctor`) into a read-only diagnostics
 
 #### Acceptance Criteria
 
-1. WHEN the `services` operation runs, THE Inventory_Module SHALL return, for each service unit, the unit name, description, load state, active state, sub state and enablement.
-2. THE Inventory_Module SHALL obtain service data from `systemctl list-units` and `systemctl list-unit-files` with `--output=json`.
+1. WHEN the `services` operation runs, THE Inventory_Module SHALL return, for each service unit, the unit name, description, whether it is installed, load state, active state, sub state and enablement.
+2. THE Inventory_Module SHALL obtain service data from `systemctl list-units --all` (loaded units) and `systemctl list-unit-files` (installed units) with `--output=json`, and SHALL merge them by unit name so that installed units that are not loaded are included.
 3. IF systemd output is unparsable, THEN THE Inventory_Module SHALL return an `unavailable` result and not a guessed list.
-4. THE Inventory_Module SHALL return at most 500 services and SHALL add a limitation string WHEN the list is truncated.
+4. THE Inventory_Module SHALL return at most 500 services, SHALL set `truncated` and SHALL add a limitation string WHEN the list is truncated.
+5. WHERE a state is not reported by systemd for a unit (for example a unit file that is not loaded has no active state), THE Inventory_Module SHALL return `unknown` for that state and SHALL NOT infer it.
+6. THE Doctor Services page SHALL distinguish installed, loaded, active, inactive, failed, enabled, disabled and unknown, and SHALL NOT present inactive or disabled units as problems.
 
 ### Requirement 4: Listening socket discovery
 
@@ -73,7 +81,7 @@ S03 turns the existing Doctor shell (`apps/doctor`) into a read-only diagnostics
 2. THE Inventory_Module SHALL classify `127.0.0.0/8` and `::1` as `loopback`, `0.0.0.0`, `::` and `*` as `wildcard`, and every other address as `specific`.
 3. THE Inventory_Module SHALL strip zone suffixes such as `%lo` before classification.
 4. WHERE `ss -p` returns no process for a socket, THE Inventory_Module SHALL return `process: null` and the Doctor UI SHALL display "not visible".
-5. THE Inventory_Module SHALL return at most 300 sockets and SHALL add a limitation string WHEN the list is truncated.
+5. THE Inventory_Module SHALL return at most 300 sockets, SHALL set `truncated` and SHALL add a limitation string WHEN the list is truncated.
 
 ### Requirement 5: Software discovery
 
@@ -96,11 +104,13 @@ S03 turns the existing Doctor shell (`apps/doctor`) into a read-only diagnostics
 2. THE Audit_Module SHALL expose the Steps `resources`, `services`, `network`, `software`, `ssh`, `firewall`, `updates` and `certificates`, in that order, as its operation list.
 3. IF a Step receives arguments other than `null`, THEN THE Audit_Module SHALL reject the call.
 4. WHEN a Step runs, THE Audit_Module SHALL return the observation time, the evidence collected for that Step and a list of Check_Results.
-5. THE Audit_Module SHALL give each Check_Result a stable `ruleId`, one Outcome, and a Severity only WHEN the Outcome is `finding`.
+5. THE Audit_Module SHALL give each Check_Result a stable `ruleId`, one Outcome, and a Severity only WHEN the Outcome is `finding`. WHEN a check cannot be completed because its evidence was truncated, skipped or limited, THE Audit_Module SHALL use Outcome `incomplete`.
 6. THE Audit_Module SHALL limit each Check_Result to 10 evidence lines of at most 200 characters with control characters removed.
 7. THE Audit_Module SHALL limit each Step to 100 Check_Results.
 8. WHERE a conclusion goes beyond observed facts, THE Audit_Module SHALL set `inferred` to true.
-9. THE Audit_Module SHALL report summary counts by Outcome and by Severity and SHALL NOT compute a security score.
+9. THE Audit_Module SHALL report summary counts by Outcome and by Severity, plus Coverage, and SHALL NOT compute a security score.
+10. THE Doctor and the reports SHALL show Scan_Status and Coverage separately. A Scan with Scan_Status `complete` and any `unavailable`, `incomplete` or `error` results SHALL NOT be described as a comprehensive or clean assessment.
+11. THE Audit_Module SHALL keep valid findings found before an evidence limit was reached.
 
 ### Requirement 7: Step error handling
 
@@ -112,7 +122,8 @@ S03 turns the existing Doctor shell (`apps/doctor`) into a read-only diagnostics
 2. IF a probe returns an unexpected exit status, unparsable output or truncated output, THEN THE Audit_Module SHALL return an `error` Check_Result with a short message and without raw output.
 3. IF one command times out, THEN THE Audit_Module SHALL return `error` for the dependent checks and continue with the rest of the Step.
 4. IF a command is cancelled or the connection is lost, THEN THE Audit_Module SHALL abort the Step and return the error to the caller.
-5. THE Audit_Module SHALL NOT return `passed` for a check whose data is missing.
+5. THE Audit_Module SHALL NOT return `passed` for a check whose data is missing, inaccessible or truncated.
+6. WHEN evidence for a check was truncated by a limit and no violation was found in the evidence read, THE Audit_Module SHALL return `incomplete` and not `passed`.
 
 ### Requirement 8: Resource, service and network rules
 
@@ -120,15 +131,15 @@ S03 turns the existing Doctor shell (`apps/doctor`) into a read-only diagnostics
 
 #### Acceptance Criteria
 
-1. WHEN `MemAvailable` is below 10% of total memory, THE Audit_Module SHALL return `mem.low-available` as a `medium` finding, and as a `high` finding WHEN below 5%.
-2. WHEN a filesystem is at least 80% used, THE Audit_Module SHALL return `disk.low-space` as `medium`, at least 90% as `high`, and at least 95% as `critical`, one result per filesystem.
-3. WHEN a filesystem has less than 100 MiB available, THE Audit_Module SHALL return `disk.low-space` as `high`.
-4. WHEN a service unit has active state `failed`, THE Audit_Module SHALL return `svc.failed` as a `medium` finding for that unit, up to 20 findings, then add a limitation.
-5. WHEN no service unit has active state `failed`, THE Audit_Module SHALL return one `svc.failed` result with Outcome `passed`.
-6. WHEN a socket on port 3306, 5432, 6379, 27017, 11211 or 9200 has Binding_Class `wildcard` or `specific`, THE Audit_Module SHALL return `net.database-exposed` as a `high` finding with `inferred` true.
-7. THE `net.database-exposed` text SHALL state that the port listens on a non-loopback address and SHALL NOT state that it is publicly reachable.
-8. THE Audit_Module SHALL NOT include a CPU utilization rule.
-9. THE Audit_Module SHALL define all thresholds as constants in `rules.rs`.
+1. WHEN `MemAvailable` is below 10% of total memory, THE Audit_Module SHALL return `mem.low-available` as a `medium` finding, and as a `high` finding WHEN below 5%. THE result SHALL state that it is a single snapshot and not evidence of sustained memory exhaustion.
+2. WHEN a filesystem is at least 80% used, THE Audit_Module SHALL return `disk.low-space` as `medium`, at least 90% as `high`, and at least 95% as `critical`. WHEN a filesystem of at least 1 GiB total size has less than 100 MiB available, THE Audit_Module SHALL treat that as `high`; smaller filesystems are assessed by percentage only. THE Audit_Module SHALL return one result per filesystem with the highest applicable severity.
+3. THE Audit_Module SHALL assess only the meaningful filesystems returned by the Inventory_Module and SHALL add a limitation WHEN the filesystem list was truncated, returning `incomplete` and not `passed` for the disk rule in that case unless a finding exists.
+4. WHEN a service unit has active state `failed`, THE Audit_Module SHALL return `svc.failed` as a `medium` finding for that unit, up to 20 findings, then add a limitation. Inactive, disabled and `unknown` units SHALL NOT produce a finding.
+5. WHEN the service list is complete and no unit has active state `failed`, THE Audit_Module SHALL return one `svc.failed` result with Outcome `passed`. WHEN the service list is truncated and no failed unit was seen, THE Audit_Module SHALL return `incomplete`.
+6. WHEN a socket listens on port 3306, 5432, 6379, 27017, 11211 or 9200, THE Audit_Module SHALL treat it as a potential database listener and return `net.database-exposed` as follows: Binding_Class `loopback` gives no finding; a `specific` address in a private or link-local range (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `169.254.0.0/16`, `fc00::/7`, `fe80::/10`) gives a `low` finding; `wildcard` gives a `medium` finding; any other `specific` address gives a `medium` finding with the address as evidence.
+7. THE `net.database-exposed` result SHALL set `inferred` true unless the process name is visible and matches the expected service, SHALL state that the port listens on a non-loopback address, and SHALL NOT state that it is publicly reachable. THE Audit_Module SHALL NOT assign `high` solely from port and binding, and SHALL NOT scan externally.
+8. WHEN the socket list is truncated and no database listener finding exists, THE Audit_Module SHALL return `net.database-exposed` as `incomplete`.
+9. THE Audit_Module SHALL NOT include a CPU utilization rule, and SHALL define all thresholds as constants in `rules.rs`.
 
 ### Requirement 9: SSH configuration rules
 
@@ -136,16 +147,17 @@ S03 turns the existing Doctor shell (`apps/doctor`) into a read-only diagnostics
 
 #### Acceptance Criteria
 
-1. WHEN the `ssh` Step runs, THE Audit_Module SHALL read `/etc/ssh/sshd_config` and expand `Include` patterns in OpenSSH order, with relative paths resolved under `/etc/ssh`, lexical file order, depth at most 4 and at most 32 files.
-2. THE Audit_Module SHALL accept only include patterns that resolve to an absolute path matching `^/etc/ssh/[A-Za-z0-9._/*-]+$` without `..`, and SHALL skip other patterns with a limitation.
+1. WHEN the `ssh` Step runs, THE Audit_Module SHALL read `/etc/ssh/sshd_config` with a limited reader (not a full OpenSSH parser) and expand `Include` patterns with relative paths resolved under `/etc/ssh`, lexical file order, depth at most 4 and at most 32 files.
+2. THE Audit_Module SHALL accept only include patterns that resolve to an absolute path matching `^/etc/ssh/[A-Za-z0-9._/*-]+$` without `..`. WHEN a pattern is unsupported, or the depth or file limit is reached, THE Audit_Module SHALL record a limitation and return `incomplete` for both SSH rules unless a finding already exists. THE Audit_Module SHALL NOT return `passed` after skipping an include.
 3. THE Audit_Module SHALL treat keywords case-insensitively, accept `Keyword value` and `Keyword=value`, strip quotes, and use the first value seen.
-4. WHEN a `Match` line is reached, THE Audit_Module SHALL stop collecting directives, record `matchBlocks: true` and add the limitation that Match blocks may differ.
+4. WHEN a `Match` line is reached, THE Audit_Module SHALL stop collecting directives, record `matchBlocks: true`, and state that Match blocks are not fully assessed. WHEN `matchBlocks` is true, a result that would be `passed` SHALL be `incomplete`; a `finding` is kept.
 5. IF any file in the include chain is unreadable, THEN THE Audit_Module SHALL return `unavailable` for both SSH rules.
-6. WHEN the effective global `PasswordAuthentication` is `yes`, explicit or by default, THE Audit_Module SHALL return `ssh.password-auth` as a `medium` finding.
-7. WHEN the effective global `PermitRootLogin` is `yes`, THE Audit_Module SHALL return `ssh.root-login` as a `high` finding.
-8. WHEN the effective global `PermitRootLogin` is `prohibit-password`, `without-password`, `forced-commands-only` or `no`, or defaults to `prohibit-password`, THE Audit_Module SHALL return `ssh.root-login` as `passed`.
-9. THE SSH results SHALL state that they describe configuration on disk and not the state of the running daemon.
-10. THE SSH results SHALL contain only the two keyword lines and file names as evidence.
+6. WHEN the first global `PasswordAuthentication` value is `yes`, or the directive is absent in fully read files (OpenSSH default `yes`), THE Audit_Module SHALL return `ssh.password-auth` as a `medium` finding. WHEN it is `no`, THE Audit_Module SHALL return `passed` with a limitation that the result covers the global setting only, not per-user or Match settings, and SHALL NOT claim password authentication is disabled for every user.
+7. WHEN the first global `PermitRootLogin` value is `yes`, THE Audit_Module SHALL return `ssh.root-login` as a `high` finding. WHEN it is `no`, as `passed`.
+8. WHEN `PermitRootLogin` is `prohibit-password`, `without-password`, `forced-commands-only`, or absent in fully read files (OpenSSH default `prohibit-password`), THE Audit_Module SHALL return `ssh.root-login` as `passed` with a limitation, and SHALL describe the observed restriction ("root login allowed with public key only" or "root login allowed for forced commands only"). THE Audit_Module SHALL NOT describe these values as "root login disabled".
+9. IF a keyword has an unrecognized or unsupported value, THEN THE Audit_Module SHALL return `error` for that rule and SHALL NOT treat it as a safe default.
+10. THE SSH results SHALL state that they describe global configuration on disk, not effective per-user settings and not the running daemon.
+11. THE SSH results SHALL contain only the two keyword lines and file names as evidence.
 
 ### Requirement 10: Firewall, updates and certificate rules
 
@@ -157,16 +169,17 @@ S03 turns the existing Doctor shell (`apps/doctor`) into a read-only diagnostics
 2. WHEN `/etc/ufw/ufw.conf` contains `ENABLED=no`, THE Audit_Module SHALL return `fw.ufw-config` as a `low` finding.
 3. IF `/etc/ufw/ufw.conf` is absent or unreadable, THEN THE Audit_Module SHALL return `fw.ufw-config` as `unavailable`.
 4. WHEN `/var/lib/update-notifier/updates-available` reports security updates greater than 0, THE Audit_Module SHALL return `upd.security-pending` as a `medium` finding, and WHEN it reports only non-security updates, as `info`.
-5. IF `/var/lib/update-notifier/updates-available` is absent, THEN THE Audit_Module SHALL return `upd.security-pending` as `unavailable`.
+5. IF `/var/lib/update-notifier/updates-available` is absent, THEN THE Audit_Module SHALL return `upd.security-pending` as `unavailable`. WHEN it reports zero updates but the apt metadata is stale or its age is unknown, THE Audit_Module SHALL return `incomplete` and SHALL NOT return `passed` or describe the server as fully patched.
 6. WHEN the age of `/var/lib/apt/periodic/update-success-stamp` exceeds 7 days, THE Audit_Module SHALL return `upd.metadata-stale` as a `low` finding, and as `unavailable` WHEN the stamp is missing.
 7. WHEN `/var/run/reboot-required` exists, THE Audit_Module SHALL return `upd.reboot-required` as an `info` finding.
-8. THE `updates` Step SHALL NOT run `apt update`, `apt list --upgradable` or `apt-check`.
-9. WHEN the `certificates` Step runs, THE Audit_Module SHALL find `ssl_certificate` directives in at most 32 nginx config files of at most 256 KB each and check at most 20 certificate paths.
+8. THE `updates` Step SHALL NOT run `apt update`, `apt list --upgradable` or `apt-check`, and every update result SHALL be labelled as based on cached update-notifier and apt metadata, not live repository state, with the cache age shown.
+9. WHEN the `certificates` Step runs, THE Audit_Module SHALL find `ssl_certificate` directives in at most 32 nginx config files of at most 256 KB each and check at most 20 certificate paths. WHEN discovery hits a limit, a file is unreadable or a path is skipped, THE Audit_Module SHALL return `incomplete` for the certificate assessment unless a finding exists.
 10. THE Audit_Module SHALL accept a certificate path only WHEN it is absolute, at most 255 characters, matches `^[A-Za-z0-9._/-]+$`, has no `..` component and starts with `/etc/letsencrypt/live/`, `/etc/letsencrypt/archive/`, `/etc/ssl/` or `/etc/nginx/`.
 11. IF a certificate path is rejected, THEN THE Audit_Module SHALL skip it with a limitation and SHALL NOT pass it to a command.
-12. WHEN a certificate has expired, THE Audit_Module SHALL return `tls.cert-expiry` as `critical`, WHEN it expires in under 14 days as `high`, and WHEN it expires in under 30 days as `medium`.
+12. WHEN a certificate has expired, THE Audit_Module SHALL return `tls.cert-expiry` as `high`, WHEN it expires in under 14 days as `high`, and WHEN it expires in under 30 days as `medium`.
 13. IF no nginx configuration exists, THEN THE Audit_Module SHALL return `notApplicable` for `tls.cert-expiry`.
 14. IF a certificate file is not readable, THEN THE Audit_Module SHALL return `unavailable` for that certificate.
+15. THE `tls.cert-expiry` results SHALL cover only certificates referenced in inspected, readable nginx configuration, SHALL NOT claim a certificate is actively served, SHALL NOT read private key files or return whole configuration files, and SHALL NOT scan TLS endpoints.
 
 ### Requirement 11: Read-only boundary
 
@@ -197,6 +210,11 @@ S03 turns the existing Doctor shell (`apps/doctor`) into a read-only diagnostics
 7. WHEN a server is removed, THE Doctor SHALL clear its results.
 8. THE Doctor SHALL keep Scan results in memory only.
 9. THE Doctor SHALL NOT retry a failed Step automatically.
+10. WHEN a Scan starts, THE Doctor SHALL assign a new Scan_Id for that server, discard the previous results and ignore any response whose Scan_Id is not the current one, so that old responses cannot overwrite newer results and two Scans never mix.
+11. THE Doctor SHALL key results by server id and endpoint (host and port), and SHALL display only results whose key matches the selected server.
+12. WHEN the host or port of a server is changed, THE Doctor SHALL invalidate that server's results.
+13. WHEN a server disconnects, THE Doctor SHALL keep completed Step results, mark them stale and the Scan incomplete.
+14. THE Doctor SHALL show Scan_Status and Coverage separately and SHALL label partial results as partial.
 
 ### Requirement 13: Doctor navigation and UI states
 
@@ -212,6 +230,7 @@ S03 turns the existing Doctor shell (`apps/doctor`) into a read-only diagnostics
 6. THE Doctor SHALL show loading, `unavailable` with reason, and connection-failure states on every table and detail view.
 7. THE `@ossiframe/ui` package SHALL gain only a severity badge.
 8. THE `@ossiframe/client` types SHALL include the new `ServerInfo` fields as `number | null` WHERE a value can be missing.
+9. THE Doctor UI SHALL present a professional diagnostics layout using existing shared UI components: summary cards (severity counts, Coverage, Scan_Status), a clear heading hierarchy, severity and Outcome filters, searchable tables, detail panels, a progress indicator, and clear `unavailable` and `incomplete` states. THE Doctor SHALL NOT add heavy dependencies, animations or charts.
 
 ### Requirement 14: Reporting
 
@@ -220,16 +239,17 @@ S03 turns the existing Doctor shell (`apps/doctor`) into a read-only diagnostics
 #### Acceptance Criteria
 
 1. WHEN the user requests a JSON report, THE Report_Builder SHALL produce JSON with `schemaVersion` 1, `generatedAt`, `server`, `scan`, `infrastructure`, `summary`, `results`, `findings`, `unavailable` and `limitations`.
-2. THE JSON `server` object SHALL contain the profile name, port, hostname and OS and SHALL NOT contain a key path or username.
-3. WHERE host redaction is enabled, THE Report_Builder SHALL omit the `host` value.
-4. WHEN the user requests an HTML report, THE Report_Builder SHALL produce one self-contained file with every dynamic value escaped by one function, no scripts, and a `Content-Security-Policy` meta tag of `default-src 'none'; style-src 'unsafe-inline'`.
-5. WHEN the user opens the Reports page, THE Doctor SHALL show a preview from `build_report` before any export.
-6. THE `build_report` command SHALL validate the format, accept at most 4 MiB of input and perform no I/O.
-7. WHEN the user exports a report, THE `save_report` command SHALL rebuild the report from the request, open a native save dialog from Rust, write only the chosen path and return `false` IF the user cancels.
+2. THE JSON `server` object SHALL contain the profile name, port, hostname and OS and SHALL NOT contain a key path or username. THE JSON `scan` object SHALL contain Scan_Status, Coverage, timestamps and missing Steps, and THE report SHALL preserve all limitations.
+3. WHERE host redaction is enabled, THE Report_Builder SHALL omit only the configured connection address (`host`). THE Doctor SHALL describe this option accurately and SHALL NOT call the report anonymized, because hostnames, service names, package versions, ports, process names and file paths remain.
+4. WHEN the user requests an HTML report, THE Report_Builder SHALL produce one self-contained file with every dynamic value escaped by one function, no scripts, no remote assets, and a `Content-Security-Policy` meta tag of `default-src 'none'; style-src 'unsafe-inline'`.
+5. WHEN the user opens the Reports page, THE Doctor SHALL show a preview from `build_report` before any export, and SHALL tell the user that the report contains server-derived data to review before sharing.
+6. THE `build_report` and `save_report` requests SHALL be typed structures validated in Rust with unknown fields denied, at most 4 MiB, at most 8 Steps, at most 100 Check_Results per Step and bounded string lengths. THE `build_report` command SHALL perform no I/O.
+7. WHEN the user exports a report, THE `save_report` command SHALL rebuild the report from the same request, open a native save dialog from Rust, write only the chosen path and return `false` IF the user cancels. THE native dialog SHALL confirm overwriting an existing file.
 8. THE Report_Commands SHALL NOT accept a file path or file content from the frontend.
 9. THE Doctor capability file SHALL list only the shared commands plus `build_report` and `save_report` and SHALL contain no `dialog:` or `fs:` permission.
 10. THE Report_Builder SHALL NOT emit passwords, passphrases, key material or configuration content beyond the specific evidence lines.
 11. IF a report save fails, THEN THE Doctor SHALL show a short error on the Reports page and change nothing else.
+12. THE Doctor SHALL build the preview and the export from one immutable assessment snapshot and one redaction setting, and THE Report_Builder SHALL be deterministic so that the preview and the exported file differ only in `generatedAt`.
 
 ### Requirement 15: Generator catalog and documentation
 
@@ -266,15 +286,16 @@ S03 turns the existing Doctor shell (`apps/doctor`) into a read-only diagnostics
 #### Acceptance Criteria
 
 1. THE verification SHALL run only against the Verification_Server.
-2. WHEN verification starts, THE maintainer SHALL confirm the host fingerprint through the Lightsail browser console before trusting the key, and `ssh-keyscan` output alone SHALL NOT count as trust.
+2. WHEN live verification starts, THE maintainer SHALL confirm the host fingerprint through the Lightsail browser console before trusting the key, and `ssh-keyscan` output alone SHALL NOT count as trust. Until then, only live verification SHALL be blocked; local implementation, unit tests and quality gates SHALL proceed.
 3. THE verification SHALL run only read-only Doctor operations.
 4. THE verification SHALL compare Doctor results with real command output for memory, filesystems, listening sockets including one without a visible process, installed packages, `sshd_config` and `sshd_config.d`, `updates-available`, and a failed or inactive unit WHERE one exists.
 5. THE verification SHALL NOT induce or fabricate findings and SHALL record that no findings exist WHERE the server has none.
 6. THE verification SHALL check cancel mid-scan, disconnect mid-scan with the incomplete label, and `unavailable` Outcomes for root-only data.
 7. THE verification SHALL export JSON and HTML, check the schema, escaping and redaction toggle, and search the files for password, passphrase and key material.
-8. THE verification SHALL generate an app with `--modules linux-audit`, confirm `linux-inventory` is added, build it, and run one `runOperation` call.
+8. THE verification SHALL generate an app with `--modules linux-audit`, confirm `linux-inventory` is added, build it, and run one `runOperation` call through the public client interface.
 9. THE verification SHALL run all Quality_Gates.
 10. THE verification evidence SHALL be recorded, sanitized as in Requirement 1, in `docs/verification/s03-ossiframe-doctor.md`, and items not run SHALL be listed as not verified.
+11. THE verification SHALL NOT change the server, and SHALL record checks that could not be verified as not verified.
 
 ### Requirement 18: S03 completion criteria
 

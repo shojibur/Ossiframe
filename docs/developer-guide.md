@@ -23,6 +23,11 @@ cargo run -p ossiframe-cli -- new ../acme-min \
 cargo run -p ossiframe-cli -- new ../acme-ops \
   --name "Acme Ops" --identifier dev.example.acme-ops \
   --modules linux-inventory --with-example-module
+
+# With the linux-audit module (linux-inventory is added automatically)
+cargo run -p ossiframe-cli -- new ../acme-audit \
+  --name "Acme Audit" --identifier dev.example.acme-audit \
+  --modules linux-audit
 ```
 
 Flags of `new`:
@@ -31,12 +36,41 @@ Flags of `new`:
 |---|---|
 | `--name` | Product name, 1 to 64 chars, starts with a letter (`A-Z a-z 0-9 space _ -`). |
 | `--identifier` | Reverse-DNS id such as `dev.example.acme`. Lowercase segments. `dev.ossiframe.*` is refused unless `--allow-ossiframe-namespace`. |
-| `--modules a,b` | Optional modules (comma separated). Today: `linux-inventory`. Required dependencies are added automatically. Default is none. |
+| `--modules a,b` | Optional modules (comma separated). Today: `linux-inventory`, `linux-audit` (see [Module catalog](#module-catalog)). Required dependencies are added automatically. Default is none. |
 | `--with-example-module` | Copies the example `ports` module into `<dir>/modules/ports/`. |
 | `--rev <40-hex>` | Ossiframe commit to pin. Default: `HEAD` of this checkout. |
 | `--ossiframe-local <path>` | Use path dependencies on a local Ossiframe checkout. Cannot be combined with `--rev`. |
 
 Invalid input stops with a one-line error and writes nothing.
+
+## Module catalog
+
+All operations are read-only, take no arguments (pass `null`; anything else is rejected) and use predefined commands without `sudo`.
+
+| Module | Depends on | Operations |
+|---|---|---|
+| `linux-inventory` | none | `server-info` (hostname, OS, kernel, CPU, memory, root disk), `services` (systemd services and their state), `listening-sockets` (TCP/UDP listeners with binding class and visible process), `software` (server software known to the dpkg database). Includes a UI page. |
+| `linux-audit` | `linux-inventory` | Eight steps, in scan order: `resources`, `services`, `network`, `software`, `ssh`, `firewall`, `updates`, `certificates`. No UI page. |
+| `ports` (example, `--with-example-module`) | none | The simple third-party example copied into your app. It is not part of the catalog; use it as the model for your own module. |
+
+Selecting `linux-audit` adds `linux-inventory` to the generated app automatically, ordered before it.
+
+### Use `linux-audit` in your app
+
+```sh
+cargo run -p ossiframe-cli -- new ../acme-audit \
+  --name "Acme Audit" --identifier dev.example.acme-audit --modules linux-audit
+```
+
+The generated app registers both modules. The module has no page, so you build your own UI. Call each step with `runOperation` from `@ossiframe/client`:
+
+```ts
+const step = await runOperation(serverId, "linux-audit", "resources", null);
+```
+
+Each step returns a step result with `step`, `observedAt`, step `evidence` and a list of `checks`. A check has `ruleId`, `title`, `category`, `outcome`, `severity` (only when the outcome is `finding`), `resource`, `evidence` (bounded lines), `explanation`, `recommendation` (advice text, never executed), `observedAt`, `limitations` and `inferred`.
+
+Outcomes are `passed`, `finding`, `unavailable`, `incomplete`, `notApplicable` and `error`. Severities are `critical`, `high`, `medium`, `low` and `info`. Treat `unavailable`, `incomplete` and `error` as "not assessed", not as passed. There is no score. Run the steps one at a time in the order listed by `list_modules`, and combine the results in your UI.
 
 ## Local mode and standalone mode
 
@@ -44,6 +78,8 @@ The generated `src-tauri/Cargo.toml` gets Ossiframe from one of two sources.
 
 - **Standalone (default).** Git dependencies on one exact commit of `https://github.com/shojibur/Ossiframe`. The commit is `--rev`, or `HEAD` of the checkout. With no `--rev`, the generator refuses a checkout with uncommitted changes. It does no network access, so the commit must already be pushed to the public repository, or `cargo build` in the generated app fails. A standalone app built purely from published revision 3ebdfc1 was verified to build, and to connect and show inventory and ports on a real server.
 - **Local (`--ossiframe-local <path>`).** Plain `path` dependencies into your checkout. For local testing only. The generator prints a warning, and the paths exist only on your machine, so switch to a published `rev` before sharing the app. A working local build does not show that the standalone build works.
+
+**`--rev` compatibility.** An explicit `--rev` must be compatible with the current generator, the frontend packages (`@ossiframe/ui`, `@ossiframe/client`) copied into the app, and the starter template. The generator copies those packages and the template from your checkout, but the Rust crates come from the pinned commit. A `--rev` from a different version can produce an app that does not build or behave correctly. Use a commit from the same checkout version unless you have verified the combination.
 
 `@ossiframe/ui` and `@ossiframe/client` are copied into the app's `packages/`; they are not published to npm.
 

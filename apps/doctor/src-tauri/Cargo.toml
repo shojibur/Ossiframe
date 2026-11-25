@@ -16,8 +16,10 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 ossiframe-core = { version = "0.1.0", path = "../../../crates/ossiframe-core" }
 ossiframe-desktop = { version = "0.1.0", path = "../../../crates/ossiframe-desktop", features = ["tauri"] }
+ossiframe-mod-linux-audit = { version = "0.1.0", path = "../../../modules/linux-audit" }
 ossiframe-mod-linux-inventory = { version = "0.1.0", path = "../../../modules/linux-inventory" }
-tauri = { version = "2", features = [] }
-
-[dev-dependencies]
+serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+time = { version = "0.3", features = ["formatting"] }

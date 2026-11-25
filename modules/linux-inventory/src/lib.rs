@@ -3,6 +3,9 @@
 //! This crate depends only on `ossiframe-core`.
 mod inventory;
 pub mod parse;
+pub mod services;
+pub mod sockets;
+pub mod software;
 pub use inventory::*;
 
 use async_trait::async_trait;
@@ -10,10 +13,24 @@ use ossiframe_core::{
     Module, ModuleId, ModuleManifest, OperationContext, OperationError, OperationInfo,
 };
 
-const OPERATIONS: &[OperationInfo] = &[OperationInfo {
-    id: "server-info",
-    description: "Hostname, OS, kernel, CPU, memory and root disk usage",
-}];
+const OPERATIONS: &[OperationInfo] = &[
+    OperationInfo {
+        id: "server-info",
+        description: "Hostname, OS, kernel, CPU, memory and root disk usage",
+    },
+    OperationInfo {
+        id: "services",
+        description: "systemd services: installed, loaded, active and enablement state",
+    },
+    OperationInfo {
+        id: "listening-sockets",
+        description: "TCP and UDP listening sockets with binding class and visible process",
+    },
+    OperationInfo {
+        id: "software",
+        description: "Server software known to the dpkg package database",
+    },
+];
 
 /// The `linux-inventory` module. Its only operation, `server-info`, takes no
 /// arguments and runs the predefined read-only probes.
@@ -52,6 +69,36 @@ impl Module for LinuxInventory {
                 serde_json::to_value(info)
                     .map_err(|_| OperationError::Failed("could not encode result".to_owned()))
             }
+            "services" => {
+                if !args.is_null() {
+                    return Err(OperationError::InvalidArguments(
+                        "services takes no arguments".to_owned(),
+                    ));
+                }
+                let info = services::collect(ctx.exec, ctx.cancel, ctx.observed_at.clone()).await?;
+                serde_json::to_value(info)
+                    .map_err(|_| OperationError::Failed("could not encode result".to_owned()))
+            }
+            "listening-sockets" => {
+                if !args.is_null() {
+                    return Err(OperationError::InvalidArguments(
+                        "listening-sockets takes no arguments".to_owned(),
+                    ));
+                }
+                let info = sockets::collect(ctx.exec, ctx.cancel, ctx.observed_at.clone()).await?;
+                serde_json::to_value(info)
+                    .map_err(|_| OperationError::Failed("could not encode result".to_owned()))
+            }
+            "software" => {
+                if !args.is_null() {
+                    return Err(OperationError::InvalidArguments(
+                        "software takes no arguments".to_owned(),
+                    ));
+                }
+                let info = software::collect(ctx.exec, ctx.cancel, ctx.observed_at.clone()).await?;
+                serde_json::to_value(info)
+                    .map_err(|_| OperationError::Failed("could not encode result".to_owned()))
+            }
             _ => Err(OperationError::Failed("unknown operation".to_owned())),
         }
     }
@@ -79,12 +126,11 @@ mod tests {
             cancel: &cancel,
             observed_at: String::new(),
         };
-        for args in [serde_json::json!({}), serde_json::json!("x")] {
-            let err = LinuxInventory
-                .run("server-info", args, &ctx)
-                .await
-                .unwrap_err();
-            assert!(matches!(err, OperationError::InvalidArguments(_)));
+        for op in ["server-info", "services", "listening-sockets", "software"] {
+            for args in [serde_json::json!({}), serde_json::json!("x")] {
+                let err = LinuxInventory.run(op, args, &ctx).await.unwrap_err();
+                assert!(matches!(err, OperationError::InvalidArguments(_)));
+            }
         }
     }
 

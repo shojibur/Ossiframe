@@ -96,7 +96,74 @@ export interface ServerInfo {
   cpuModel: string | null;
   memoryTotalKb: number | null;
   memoryAvailableKb: number | null;
+  swapTotalKb: number | null;
+  swapFreeKb: number | null;
+  cpuUsagePercent: number | null;
   rootFs: DiskInfo | null;
+  filesystems: DiskInfo[];
+  filesystemsTruncated: boolean;
+  limitations: string[];
+  probeErrors: ProbeError[];
+}
+
+export interface Service {
+  unit: string;
+  description: string | null;
+  installed: boolean;
+  load: string;
+  active: string;
+  sub: string;
+  enablement: string;
+}
+
+export interface ServicesInfo {
+  observedAt: string;
+  available: boolean;
+  services: Service[];
+  truncated: boolean;
+  limitations: string[];
+  probeErrors: ProbeError[];
+}
+
+export type SocketProtocol = "tcp" | "udp";
+export type SocketFamily = "ipv4" | "ipv6" | "unknown";
+export type SocketBinding = "loopback" | "wildcard" | "specific";
+
+export interface SocketProcess {
+  name: string;
+  pid: number;
+}
+
+export interface ListeningSocket {
+  protocol: SocketProtocol;
+  address: string;
+  port: number;
+  family: SocketFamily;
+  binding: SocketBinding;
+  private: boolean;
+  process: SocketProcess | null;
+}
+
+export interface SocketsInfo {
+  observedAt: string;
+  available: boolean;
+  sockets: ListeningSocket[];
+  truncated: boolean;
+  limitations: string[];
+  probeErrors: ProbeError[];
+}
+
+export interface Package {
+  name: string;
+  version: string;
+}
+
+export interface SoftwareInfo {
+  observedAt: string;
+  available: boolean;
+  packages: Package[];
+  truncated: boolean;
+  limitations: string[];
   probeErrors: ProbeError[];
 }
 

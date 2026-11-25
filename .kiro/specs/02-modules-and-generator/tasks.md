@@ -77,7 +77,7 @@ Tests are small plain `#[test]` unit tests embedded in the implementation tasks 
     - Run `pnpm -r typecheck` and `pnpm -r lint` for the touched packages.
     - _Requirements: 4.7, 6.1_
   - [x] 6.3 Rebuild Doctor and recheck against the Lightsail server (manual, needs the user)
-    - Run the Doctor build. Ask the user to run it at the desktop and confirm against the Lightsail server (`54.179.76.25`, user `ubuntu`; read-only): connect, host key prompt, changed host key behavior as available, credential prompt, cancel, stale marking and overview data, the same as S01.
+    - Run the Doctor build. Ask the user to run it at the desktop and confirm against the Lightsail server (`<server-ip>`, user `ubuntu`; read-only): connect, host key prompt, changed host key behavior as available, credential prompt, cancel, stale marking and overview data, the same as S01.
     - Record only what the user actually observes. Do not fabricate results. Anything not confirmed goes on the not-verified list for task 15.
     - _Requirements: 4.9, 15.1, 15.4_
 
@@ -153,7 +153,7 @@ Tests are small plain `#[test]` unit tests embedded in the implementation tasks 
     - Inspect each generated `capabilities/main.json` and confirm only the eleven Shared_Commands. Record this as Local_Mode only. This task must not commit or push.
     - _Requirements: 8.8, 9.1, 9.2, 9.5, 10.3, 10.5, 15.5, 15.7, 16.1_
   - [x] 13.2 Run both generated apps against the Lightsail server (manual, needs the user)
-    - The user runs each built app and connects to `54.179.76.25` (user `ubuntu`, read-only, disposable server named by the user). Minimal app: basic connection info (profile, endpoint, state, pinned fingerprint) and no inventory page. Acme app: `linux-inventory` overview and the `ports` page with real listening sockets, compared by the user against `ss -tln` run on the server. Try each `family` value on the ports page.
+    - The user runs each built app and connects to `<server-ip>` (user `ubuntu`, read-only, disposable server named by the user). Minimal app: basic connection info (profile, endpoint, state, pinned fingerprint) and no inventory page. Acme app: `linux-inventory` overview and the `ports` page with real listening sockets, compared by the user against `ss -tln` run on the server. Try each `family` value on the ports page.
     - Record only what the user reports. Never fabricate output.
     - _Requirements: 7.8, 11.3, 11.8, 15.1, 15.6, 16.1_
 

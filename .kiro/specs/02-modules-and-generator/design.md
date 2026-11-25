@@ -390,7 +390,7 @@ Quality gates (all must pass): `cargo fmt --all --check`, `cargo check --workspa
 
 Manual verification, recorded in `docs/verification/s02-modules-and-generator.md` with real output only:
 1. Spike: build Doctor with commands in `ossiframe-desktop` (answers the section 4 assumption). Record the result either way.
-2. Build Doctor and confirm same UI behavior against the AWS Lightsail Ubuntu 24.04 server (`54.179.76.25`, user `ubuntu`, key `~/.ssh/ossiframe.pem`; read-only, a disposable server the user named): connect, host key prompt, overview with real data.
+2. Build Doctor and confirm same UI behavior against the AWS Lightsail Ubuntu 24.04 server (`<server-ip>`, user `ubuntu`, key `<key-path>`; read-only, a disposable server the user named): connect, host key prompt, overview with real data.
 3. Local_Mode: with `--ossiframe-local`, generate outside the repository a minimal app (`... new ~/ossiframe-test/min --name "Min Ops" --identifier dev.example.min`) and an app with modules (`... new ~/ossiframe-test/acme --name "Acme Ops" --identifier dev.example.acme --modules linux-inventory --with-example-module`). Run `pnpm install` and `pnpm tauri build` in each.
 4. Connect both apps to the Lightsail server. Minimal app: basic connection info. Acme app: `linux-inventory` overview and the `ports` page with real listening sockets (user compares with `ss -tln` run on the server). Record as Local_Mode only.
 5. Confirm Doctor's registry contains only `linux-inventory`, and that each generated app exposes only the eleven `COMMAND_NAMES` (inspect `capabilities/main.json`).

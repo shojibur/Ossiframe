@@ -76,7 +76,7 @@ hostname `ip-172-26-3-117`; `Ubuntu 24.04.5 LTS` (VERSION_ID 24.04); kernel `7.0
 
 | Check | Result |
 |---|---|
-| Add server profile, connect to 54.179.76.25 with `~/.ssh/ossiframe.pem` | Pass (user confirmed) |
+| Add server profile, connect to <server-ip> with `<key-path>` | Pass (user confirmed) |
 | First-connection fingerprint dialog, trust, connect | Pass. Pinned key in local SQLite: `ssh-ed25519 SHA256:qobMUOP//FiL3rW2mD42syTV5iK5BzW0Dw9Rylibswk`, same as ssh-keyscan |
 | Overview shows actual server inventory | Pass (user confirmed) |
 | Local database contents | Profile stores host, port, user and key path only; `secret_ref` is NULL; no private key material in `doctor.sqlite3*` (`strings` search) |

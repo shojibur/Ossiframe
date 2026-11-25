@@ -253,6 +253,43 @@ mod tests {
     }
 
     #[test]
+    fn linux_audit_deps_in_both_modes_and_no_ui_tokens() {
+        let git = OssiframeSource::Git {
+            rev: "d".repeat(40),
+        };
+        let out = render(
+            "{{module_deps}}\n{{module_ui_list}}\n",
+            &tokens_for(&git, &["linux-audit"], false),
+        )
+        .unwrap();
+        assert!(
+            out.contains("ossiframe-mod-linux-inventory = { git = "),
+            "{out}"
+        );
+        assert!(
+            out.contains("ossiframe-mod-linux-audit = { git = "),
+            "{out}"
+        );
+        assert!(out.find("linux-inventory").unwrap() < out.find("linux-audit").unwrap());
+        assert!(out.contains("ui_linux_inventory,") && !out.contains("ui_linux_audit"));
+        let local = OssiframeSource::Local {
+            root: PathBuf::from("/work/Ossiframe"),
+        };
+        let out = render(
+            "{{module_deps}}\n",
+            &tokens_for(&local, &["linux-audit"], false),
+        )
+        .unwrap();
+        assert!(out.contains("ossiframe-mod-linux-inventory = { path = \"/work/Ossiframe/modules/linux-inventory\" }"), "{out}");
+        assert!(
+            out.contains(
+                "ossiframe-mod-linux-audit = { path = \"/work/Ossiframe/modules/linux-audit\" }"
+            ),
+            "{out}"
+        );
+    }
+
+    #[test]
     fn local_mode_uses_paths_and_no_git_or_patch() {
         let src = OssiframeSource::Local {
             root: PathBuf::from("/work/Ossiframe"),

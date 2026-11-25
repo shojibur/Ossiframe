@@ -210,6 +210,36 @@ fn find_manifests(dir: &Path, base: &Path, out: &mut Vec<PathBuf>) -> Result<(),
     Ok(())
 }
 
+/// The Ossiframe MIT license, embedded at build time.
+const OSSIFRAME_LICENSE: &str = include_str!("../../../LICENSE");
+
+/// Text of `OSSIFRAME-LICENSE`: a note naming every copied Ossiframe
+/// directory (taken from what `build` copies), then the MIT text.
+fn license_file(modules: &[ResolvedModule]) -> String {
+    let mut dirs = vec!["packages/ui".to_owned(), "packages/client".to_owned()];
+    for m in modules {
+        let id = m.id().as_str();
+        if m.entry.ui_dir.is_some() {
+            dirs.push(format!("src/modules/{id}"));
+        }
+        if m.entry.is_example {
+            dirs.push(format!("modules/{id}"));
+        }
+    }
+    let mut out = String::from(
+        "This project contains source copied from Ossiframe, which is licensed under the MIT License below.\nThe following directories are copied from Ossiframe:\n\n",
+    );
+    for d in &dirs {
+        out.push_str(&format!("- {d}\n"));
+    }
+    out.push_str("\nThe license of the rest of this project is yours to choose.\n\n---\n\n");
+    out.push_str(OSSIFRAME_LICENSE);
+    if !out.ends_with('\n') {
+        out.push('\n');
+    }
+    out
+}
+
 fn build(job: &Job, tmp: &Path) -> Result<(), WriteError> {
     let root = job.repo_root;
     // 1. Starter template.
@@ -250,6 +280,9 @@ fn build(job: &Job, tmp: &Path) -> Result<(), WriteError> {
             fs::write(to.join("Cargo.toml"), text).at(&to)?;
         }
     }
+    // Copied Ossiframe source is always present (shared packages).
+    let lic = tmp.join("OSSIFRAME-LICENSE");
+    fs::write(&lic, license_file(job.modules)).at(&lic)?;
     // 4. Mode notice in the README.
     let readme = tmp.join("README.md");
     if readme.is_file() {
@@ -351,6 +384,16 @@ mod tests {
     }
 
     #[test]
+    fn license_lists_no_dirs_for_linux_audit() {
+        use crate::plan::{catalog, resolve_modules};
+        let ids = [ossiframe_core::ModuleId::parse("linux-audit").unwrap()];
+        let modules = resolve_modules(&catalog(), &ids, false).unwrap();
+        let lic = license_file(&modules);
+        assert!(lic.contains("- src/modules/linux-inventory\n"));
+        assert!(!lic.contains("linux-audit"), "{lic}");
+    }
+
+    #[test]
     fn failure_leaves_no_target_and_no_temp_dir() {
         let base = std::env::temp_dir().join(format!("ossiframe-cli-write-{}", std::process::id()));
         let _ = fs::remove_dir_all(&base);
@@ -412,6 +455,17 @@ mod tests {
         assert!(!target.join("src-tauri/Cargo.toml.tmpl").exists());
         assert!(target.join("modules/ports/src/lib.rs").is_file());
         assert!(!target.join("modules/ports/ui").exists());
+        let lic = fs::read_to_string(target.join("OSSIFRAME-LICENSE")).unwrap();
+        assert!(lic.contains("MIT License") && lic.contains("Copyright (c)"));
+        for dir in [
+            "packages/ui",
+            "packages/client",
+            "src/modules/linux-inventory",
+            "src/modules/ports",
+            "modules/ports",
+        ] {
+            assert!(lic.contains(&format!("- {dir}\n")), "missing {dir}");
+        }
         // Generated CSP lines equal Doctor's.
         let csp = |p: &Path| -> Vec<String> {
             fs::read_to_string(p)
