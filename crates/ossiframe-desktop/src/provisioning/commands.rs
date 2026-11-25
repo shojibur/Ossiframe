@@ -194,10 +194,11 @@ fn operation_id(id: &str) -> Result<&str, IpcError> {
     server_id(id)
 }
 
-fn plan_error(reason: PlanReason, message: &str) -> IpcError {
+pub fn plan_error(reason: PlanReason, message: &str) -> IpcError {
     IpcError::Plan {
         reason,
         message: message.to_owned(),
+        fingerprints: Vec::new(),
     }
 }
 
@@ -258,7 +259,7 @@ fn holder_text(h: &lock::HolderInfo) -> String {
     }
 }
 
-fn start_error(e: StartError) -> IpcError {
+pub fn start_error(e: StartError) -> IpcError {
     match e {
         StartError::Busy { holder } => plan_error(
             PlanReason::Busy,
@@ -427,6 +428,20 @@ impl Provisioning {
         Arc::new(ServiceLink::new(self.service.clone(), server_id))
     }
 
+    /// The shared pieces an application layer (S05) builds on. The engine
+    /// is the same one: one remote lock and one claim set per server.
+    pub fn engine(&self) -> Arc<Engine> {
+        self.engine.clone()
+    }
+
+    pub fn store(&self) -> Arc<Store> {
+        self.store.clone()
+    }
+
+    pub fn service(&self) -> Arc<ServerService> {
+        self.service.clone()
+    }
+
     fn profile(&self, id: &str) -> Result<Profile, IpcError> {
         let v = self.service.get(id)?;
         let connected = v.state == crate::session::ConnState::Connected;
@@ -534,6 +549,7 @@ impl Provisioning {
             port: profile.identity.port,
             user: profile.identity.user,
             host_key_sha256: profile.identity.host_key_sha256,
+            app_id: None,
         };
         let handle = self.plans.insert(plan.clone());
         Ok(PlanDto {
@@ -775,6 +791,20 @@ pub fn setup<R: Runtime>(
     app: &mut tauri::App<R>,
     provisioner: Arc<dyn Provisioner>,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    setup_with(app, |_store, events| (provisioner, events))
+}
+
+/// Like [`setup`], for an app whose provisioner or event sink needs the
+/// shared store (for example to keep application records in step with
+/// operations). `build` receives the store and the UI event sink and returns
+/// the provisioner and the sink the engine will use.
+pub fn setup_with<R: Runtime>(
+    app: &mut tauri::App<R>,
+    build: impl FnOnce(
+        Arc<Store>,
+        Arc<dyn OperationEvents>,
+    ) -> (Arc<dyn Provisioner>, Arc<dyn OperationEvents>),
+) -> Result<(), Box<dyn std::error::Error>> {
     let service = app
         .try_state::<ServerService>()
         .ok_or("tauri_support::setup must run before provisioning::setup")?
@@ -786,7 +816,8 @@ pub fn setup<R: Runtime>(
         .store()
         .recover_in_flight_operations()
         .map_err(|e| format!("cannot recover operations: {e}"))?;
-    let events = Arc::new(TauriOperationEvents(app.handle().clone()));
+    let ui: Arc<dyn OperationEvents> = Arc::new(TauriOperationEvents(app.handle().clone()));
+    let (provisioner, events) = build(service.store(), ui);
     app.manage(Provisioning::new(service, provisioner, events));
     Ok(())
 }
@@ -1075,6 +1106,7 @@ mod tests {
                     port: 0,
                     user: String::new(),
                     host_key_sha256: String::new(),
+                    app_id: None,
                 },
                 os: "ubuntu".into(),
                 components: vec!["git".into()],

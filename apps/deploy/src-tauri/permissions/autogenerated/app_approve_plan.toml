@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-app-approve-plan"
+description = "Enables the app_approve_plan command without any pre-configured scope."
+commands.allow = ["app_approve_plan"]
+
+[[permission]]
+identifier = "deny-app-approve-plan"
+description = "Denies the app_approve_plan command without any pre-configured scope."
+commands.deny = ["app_approve_plan"]

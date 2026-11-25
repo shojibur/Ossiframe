@@ -64,6 +64,7 @@ fn placeholder_target() -> PlanTarget {
         port: 0,
         user: String::new(),
         host_key_sha256: String::new(),
+        app_id: None,
     }
 }
 
@@ -104,6 +105,7 @@ fn steps(missing: &[String]) -> Result<Vec<PlanStep>, PlanError> {
             command: update,
             mode: StepMode::Durable,
             deadline: UPDATE_DEADLINE,
+            requires_stdin: false,
         },
         PlanStep {
             id: STEP_CANDIDATE_CHECK.to_owned(),
@@ -111,6 +113,7 @@ fn steps(missing: &[String]) -> Result<Vec<PlanStep>, PlanError> {
             command: sim,
             mode: StepMode::Gate,
             deadline: GATE_DEADLINE,
+            requires_stdin: false,
         },
         PlanStep {
             id: STEP_APT_INSTALL.to_owned(),
@@ -118,6 +121,7 @@ fn steps(missing: &[String]) -> Result<Vec<PlanStep>, PlanError> {
             command: install,
             mode: StepMode::Durable,
             deadline: INSTALL_DEADLINE,
+            requires_stdin: false,
         },
     ])
 }

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-app-list-releases"
+description = "Enables the app_list_releases command without any pre-configured scope."
+commands.allow = ["app_list_releases"]
+
+[[permission]]
+identifier = "deny-app-list-releases"
+description = "Denies the app_list_releases command without any pre-configured scope."
+commands.deny = ["app_list_releases"]

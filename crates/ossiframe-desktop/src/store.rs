@@ -121,12 +121,48 @@ const MIGRATIONS: &[&str] = &[
         value TEXT NOT NULL
     );
     INSERT INTO meta (key, value) VALUES ('installation_id', lower(hex(randomblob(16))));",
+    // 3: deployed applications and their releases. A server with an app that
+    // is not Removed cannot be deleted (RESTRICT, plus an explicit check).
+    // No secret column by design: no passwords, keys or environment values.
+    "CREATE TABLE apps (
+        id TEXT PRIMARY KEY,
+        server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE RESTRICT,
+        slug TEXT NOT NULL,
+        app_type TEXT NOT NULL,
+        domain TEXT NOT NULL,
+        repo_url TEXT NOT NULL,
+        repo_branch TEXT NOT NULL,
+        entry_file TEXT NOT NULL,
+        linux_user TEXT NOT NULL,
+        app_root TEXT NOT NULL,
+        db_enabled INTEGER NOT NULL DEFAULT 0,
+        db_name TEXT,
+        db_user TEXT,
+        disable_default_site INTEGER NOT NULL DEFAULT 0,
+        state TEXT NOT NULL,
+        current_release_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE (server_id, slug)
+    );
+    CREATE TABLE releases (
+        id TEXT PRIMARY KEY,
+        app_id TEXT NOT NULL REFERENCES apps(id) ON DELETE CASCADE,
+        commit_sha TEXT,
+        branch TEXT NOT NULL,
+        status TEXT NOT NULL,
+        operation_id TEXT REFERENCES operations(id) ON DELETE SET NULL,
+        created_at TEXT NOT NULL
+    );
+    CREATE INDEX releases_app ON releases(app_id, created_at);",
 ];
 
 /// Statuses in which a server is in use. Must match the camelCase names of
 /// `ossiframe_core::OperationState`.
 const UNRESOLVED_SQL: &str = "('pending','running','verifying','unknownOutcome')";
 
+mod apps;
+pub use apps::*;
 #[cfg(feature = "provisioning")]
 mod operations;
 #[cfg(feature = "provisioning")]
@@ -249,13 +285,15 @@ impl Store {
 
     /// Deletes the profile and, through the foreign key, its pin. Operation
     /// history is kept with a null server reference. Refused while the
-    /// server has an unresolved operation.
+    /// server has an unresolved operation or an app that is not Removed.
     pub fn delete(&self, id: &str) -> Result<(), StoreError> {
         let mut db = self.db();
         let tx = db.transaction()?;
-        if unresolved(&tx, id)? {
+        if unresolved(&tx, id)? || apps::has_live_apps(&tx, id)? {
             return Err(StoreError::InUse);
         }
+        // Only Removed apps remain here; their records go with the profile.
+        tx.execute("DELETE FROM apps WHERE server_id=?1", [id])?;
         let n = tx.execute("DELETE FROM servers WHERE id=?1", [id])?;
         if n == 0 {
             return Err(StoreError::NotFound);
@@ -471,8 +509,10 @@ pub(crate) mod tests {
         let n: i64 = conn
             .query_row("SELECT COUNT(*) FROM schema_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(n, 2);
+        assert_eq!(n, 3);
         for table in [
+            "apps",
+            "releases",
             "servers",
             "host_keys",
             "operations",
@@ -531,7 +571,7 @@ pub(crate) mod tests {
             .db()
             .query_row("SELECT MAX(version) FROM schema_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(version, 2);
+        assert_eq!(version, 3);
         let id: String = s
             .db()
             .query_row(

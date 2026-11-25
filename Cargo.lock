@@ -3009,13 +3009,18 @@ dependencies = [
 name = "ossiframe-deploy"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "ossiframe-core",
  "ossiframe-desktop",
+ "ossiframe-mod-app-deploy",
  "ossiframe-mod-linux-inventory",
  "ossiframe-mod-ubuntu-provisioning",
+ "serde",
  "serde_json",
  "tauri",
  "tauri-build",
+ "tokio",
+ "uuid",
 ]
 
 [[package]]
@@ -3052,6 +3057,18 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-dialog",
  "time",
+]
+
+[[package]]
+name = "ossiframe-mod-app-deploy"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "getrandom 0.4.3",
+ "ossiframe-core",
+ "serde",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]

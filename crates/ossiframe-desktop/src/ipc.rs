@@ -161,6 +161,27 @@ pub enum PlanReason {
     Blocked,
     RePlanRequired,
     NotSupported,
+    /// The application id is unknown (S05).
+    AppNotFound,
+    /// The domain is already used by another application.
+    DomainInUse,
+    /// The slug is already used on this server.
+    SlugInUse,
+    /// The Git host's SSH keys are not confirmed; the error carries their
+    /// fingerprints.
+    GitHostKeyUnconfirmed,
+}
+
+/// A scanned SSH host key of a Git host, shown so the user can compare its
+/// fingerprint with the host's published one.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitHostFingerprint {
+    pub host: String,
+    pub port: u16,
+    pub key_type: String,
+    /// `SHA256:...`
+    pub sha256: String,
 }
 
 /// Errors returned to the frontend. Messages are short and sanitized.
@@ -222,7 +243,13 @@ pub enum IpcError {
     /// A plan, approval or operation request was refused. The message is
     /// short and never contains raw command output.
     #[error("plan: {message}")]
-    Plan { reason: PlanReason, message: String },
+    Plan {
+        reason: PlanReason,
+        message: String,
+        /// Only for `gitHostKeyUnconfirmed`.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        fingerprints: Vec<GitHostFingerprint>,
+    },
     #[error("internal error")]
     Internal,
 }
@@ -288,6 +315,7 @@ impl From<ServiceError> for IpcError {
             ServiceError::ServerInUse => IpcError::Plan {
                 reason: PlanReason::ServerInUse,
                 message: "the server has an operation that is running or needs review".into(),
+                fingerprints: Vec::new(),
             },
             ServiceError::Exec(e) => e.into(),
             ServiceError::Connect(c) => match c {
@@ -401,6 +429,7 @@ mod tests {
         let v = serde_json::to_value(IpcError::Plan {
             reason: PlanReason::ServerInUse,
             message: "x".into(),
+            fingerprints: Vec::new(),
         })
         .unwrap();
         assert_eq!(
@@ -409,6 +438,33 @@ mod tests {
         );
         let v = serde_json::to_value(PlanReason::RePlanRequired).unwrap();
         assert_eq!(v, serde_json::json!("rePlanRequired"));
+    }
+
+    #[test]
+    fn app_plan_reasons_serialize_and_fingerprints_ride_on_the_plan_error() {
+        for (r, name) in [
+            (PlanReason::AppNotFound, "appNotFound"),
+            (PlanReason::DomainInUse, "domainInUse"),
+            (PlanReason::SlugInUse, "slugInUse"),
+            (PlanReason::GitHostKeyUnconfirmed, "gitHostKeyUnconfirmed"),
+        ] {
+            assert_eq!(serde_json::to_value(r).unwrap(), serde_json::json!(name));
+        }
+        let v = serde_json::to_value(IpcError::Plan {
+            reason: PlanReason::GitHostKeyUnconfirmed,
+            message: "confirm".into(),
+            fingerprints: vec![GitHostFingerprint {
+                host: "git.example.org".into(),
+                port: 22,
+                key_type: "ssh-ed25519".into(),
+                sha256: "SHA256:abc".into(),
+            }],
+        })
+        .unwrap();
+        assert_eq!(
+            v["fingerprints"][0],
+            serde_json::json!({"host": "git.example.org", "port": 22, "keyType": "ssh-ed25519", "sha256": "SHA256:abc"})
+        );
     }
 
     #[test]

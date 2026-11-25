@@ -1,15 +1,18 @@
-//! Ossiframe Deploy: server provisioning.
+//! Ossiframe Deploy: server provisioning and application deployment.
 //!
-//! The frontend can only call the shared typed commands and the ten typed
-//! `provision_*` commands from `ossiframe-desktop`. None of them accepts a
-//! program, shell command, path, URL or privilege level. Modules are
-//! `linux-inventory` and `ubuntu-provisioning`.
+//! The frontend can only call the shared typed commands, the ten typed
+//! `provision_*` commands from `ossiframe-desktop` and the thirteen typed
+//! `app_*` commands of this app. None of them accepts a program, shell
+//! command, path, URL or privilege level. Modules are `linux-inventory`,
+//! `ubuntu-provisioning` and `app-deploy` (the last one is reached only
+//! through the `app_*` commands).
+pub mod apps;
+
 use ossiframe_core::Registry;
-use ossiframe_desktop::provisioning::{self, commands as provision};
+use ossiframe_desktop::provisioning::commands as provision;
 use ossiframe_desktop::tauri_support::{AppSetup, commands, setup};
 use ossiframe_mod_linux_inventory::LinuxInventory;
 use ossiframe_mod_ubuntu_provisioning::UbuntuProvisioning;
-use std::sync::Arc;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -27,7 +30,7 @@ pub fn run() {
                     registry,
                 },
             )?;
-            provisioning::setup(app, Arc::new(UbuntuProvisioning))
+            apps::setup(app)
         })
         .invoke_handler(tauri::generate_handler![
             commands::list_servers,
@@ -51,6 +54,19 @@ pub fn run() {
             provision::provision_release_stale_lock,
             provision::provision_get_operation,
             provision::provision_list_operations,
+            apps::commands::app_types,
+            apps::commands::app_list,
+            apps::commands::app_get,
+            apps::commands::app_create_plan,
+            apps::commands::app_redeploy_plan,
+            apps::commands::app_rollback_plan,
+            apps::commands::app_remove_plan,
+            apps::commands::app_approve_plan,
+            apps::commands::app_get_env,
+            apps::commands::app_set_env,
+            apps::commands::app_list_releases,
+            apps::commands::app_deploy_key_status,
+            apps::commands::app_check_access,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Ossiframe Deploy");
@@ -58,6 +74,7 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
+    use crate::apps::APP_COMMAND_NAMES;
     use ossiframe_desktop::provisioning::PROVISION_COMMAND_NAMES;
     use ossiframe_desktop::tauri_support::COMMAND_NAMES;
     use std::collections::BTreeSet;
@@ -70,6 +87,7 @@ mod tests {
         COMMAND_NAMES
             .iter()
             .chain(PROVISION_COMMAND_NAMES)
+            .chain(APP_COMMAND_NAMES)
             .map(|n| kebab(n))
             .collect()
     }
@@ -86,7 +104,7 @@ mod tests {
     }
 
     #[test]
-    fn capability_allows_exactly_the_shared_and_provision_commands() {
+    fn capability_allows_exactly_the_shared_provision_and_app_commands() {
         let allowed: BTreeSet<String> = permissions()
             .iter()
             .filter_map(|p| p.strip_prefix("allow-"))
@@ -101,9 +119,13 @@ mod tests {
     }
 
     #[test]
-    fn build_manifest_lists_exactly_the_shared_and_provision_commands() {
+    fn build_manifest_lists_exactly_the_shared_provision_and_app_commands() {
         let text = include_str!("../build.rs");
-        for name in COMMAND_NAMES.iter().chain(PROVISION_COMMAND_NAMES) {
+        for name in COMMAND_NAMES
+            .iter()
+            .chain(PROVISION_COMMAND_NAMES)
+            .chain(APP_COMMAND_NAMES)
+        {
             assert!(
                 text.contains(&format!("\"{name}\"")),
                 "build.rs lacks {name}"
@@ -111,7 +133,7 @@ mod tests {
         }
         assert_eq!(
             text.matches("        \"").count(),
-            COMMAND_NAMES.len() + PROVISION_COMMAND_NAMES.len()
+            COMMAND_NAMES.len() + PROVISION_COMMAND_NAMES.len() + APP_COMMAND_NAMES.len()
         );
     }
 

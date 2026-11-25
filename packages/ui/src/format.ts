@@ -52,6 +52,14 @@ function planMessage(reason: PlanReason, detail: string): string {
       return `The server changed after the plan was made. Nothing was changed. Create a new plan.${more}`;
     case "notSupported":
       return `This is not supported.${more}`;
+    case "appNotFound":
+      return "This application no longer exists.";
+    case "domainInUse":
+      return `This domain is already used by another application.${more}`;
+    case "slugInUse":
+      return "An application with this name already exists on this server.";
+    case "gitHostKeyUnconfirmed":
+      return "Confirm the Git host's key fingerprint before continuing.";
   }
 }
 

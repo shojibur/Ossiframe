@@ -169,6 +169,10 @@ pub struct PlanTarget {
     pub user: String,
     /// SHA-256 of the pinned host key.
     pub host_key_sha256: String,
+    /// Application the plan belongs to (S05). Omitted from the JSON when
+    /// `None`, so S04 plan digests do not change.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub app_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -218,6 +222,11 @@ pub struct PlanStep {
     pub command: CommandSpec,
     pub mode: StepMode,
     pub deadline: Duration,
+    /// The command needs stdin, which is never stored. The engine runs such
+    /// a step directly and refuses it if the stdin is missing (a plan
+    /// reloaded from storage).
+    #[serde(default)]
+    pub requires_stdin: bool,
 }
 
 /// Material facts that are re-checked before execution starts.
@@ -369,6 +378,26 @@ pub struct CheckResult {
     pub detail: String,
 }
 
+/// What the real state of an application says about an interrupted
+/// operation. Evidence for the user only: it never resumes or repairs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AppRecoveryVerdict {
+    /// The expected release is live and the health checks pass.
+    Deployed,
+    /// `current` is still on the previous release.
+    NotSwitched,
+    Unknown,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppRecovery {
+    pub verdict: AppRecoveryVerdict,
+    /// Plain text, short: what was observed.
+    pub detail: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ComponentVerdict {
@@ -482,6 +511,18 @@ pub trait Provisioner: Send + Sync {
         cancel: &CancelToken,
         plan: &Plan,
     ) -> Vec<CheckResult>;
+
+    /// Read-only evidence about the real state of the application behind a
+    /// plan whose target has an `app_id`, used by reconcile and "mark
+    /// resolved". `None` (the default) means this module has none.
+    async fn app_recovery(
+        &self,
+        _exec: &dyn Executor,
+        _cancel: &CancelToken,
+        _plan: &Plan,
+    ) -> Option<AppRecovery> {
+        None
+    }
 }
 
 /// `dpkg-query -W -f` format for the whole-system dpkg health probe. It runs
@@ -704,6 +745,7 @@ mod tests {
                 port: 22,
                 user: "u".into(),
                 host_key_sha256: "k".into(),
+                app_id: None,
             },
             os: "ubuntu 24.04".into(),
             components: vec!["x".into()],
@@ -727,6 +769,7 @@ mod tests {
                     .unwrap(),
                 mode: StepMode::Durable,
                 deadline: Duration::from_secs(60),
+                requires_stdin: false,
             }],
             preconditions: Preconditions {
                 os_version: "24.04".into(),
@@ -748,6 +791,15 @@ mod tests {
         let mut changed = plan();
         changed.packages[0].name = "q".into();
         assert_ne!(a, serde_json::to_string(&changed).unwrap());
+    }
+
+    #[test]
+    fn plan_target_without_app_id_deserializes_and_serializes_unchanged() {
+        let json =
+            r#"{"serverId":"s","name":"n","host":"h","port":22,"user":"u","hostKeySha256":"k"}"#;
+        let target: PlanTarget = serde_json::from_str(json).unwrap();
+        assert_eq!(target.app_id, None);
+        assert_eq!(serde_json::to_string(&target).unwrap(), json);
     }
 
     #[test]

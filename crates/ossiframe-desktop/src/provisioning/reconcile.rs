@@ -5,7 +5,7 @@
 //! read. A probe that fails or cannot be parsed is `Unknown` or `Err`, and
 //! unknown evidence never counts as clear.
 use crate::remote_lock::{Evidence, StaleEvidence};
-use ossiframe_core::command::CommandSpec;
+use ossiframe_core::command::{CommandSpec, Privilege};
 use ossiframe_core::executor::{CancelToken, ExecResult, Executor};
 use ossiframe_core::provision::{self, PackageState, Plan, StepMode};
 use serde::Serialize;
@@ -46,16 +46,30 @@ fn root(program: &str, args: &[&str], timeout: Duration) -> CommandSpec {
 /// would unload a failed unit and lose its result before it is persisted.
 /// The environment of the step is part of the step's own argv (the module
 /// wraps it in `/usr/bin/env`), so no `-E` option is added here.
+///
+/// A `RunAs(user)` step is still launched by root's `systemd-run`, but with
+/// `--uid`/`--gid` of that user, so systemd runs the step itself as the
+/// user (never as root) and the unit survives an SSH loss. `LinuxUserName`
+/// cannot be root.
 pub fn launch_command(unit: &str, step: &CommandSpec) -> CommandSpec {
     let unit_arg = format!("--unit={unit}");
-    let mut args: Vec<&str> = vec![
-        &unit_arg,
+    let (uid_arg, gid_arg) = match step.privilege() {
+        Privilege::RunAs(u) => (
+            Some(format!("--uid={}", u.as_str())),
+            Some(format!("--gid={}", u.as_str())),
+        ),
+        _ => (None, None),
+    };
+    let mut args: Vec<&str> = vec![&unit_arg];
+    args.extend(uid_arg.as_deref());
+    args.extend(gid_arg.as_deref());
+    args.extend([
         "--service-type=exec",
         "--remain-after-exit",
         "--quiet",
         "--",
         step.program(),
-    ];
+    ]);
     args.extend(step.args().iter().map(String::as_str));
     root(SYSTEMD_RUN, &args, LAUNCH_TIMEOUT)
 }
@@ -241,7 +255,7 @@ pub struct EvidenceReport {
 }
 
 impl EvidenceReport {
-    fn push(&mut self, label: &str, value: impl Into<String>) {
+    pub fn push(&mut self, label: &str, value: impl Into<String>) {
         self.items.push(EvidenceItem {
             label: label.to_owned(),
             value: value.into(),
@@ -694,6 +708,21 @@ mod tests {
         let line = launch_command("ossiframe-op-x-0", &step).to_command_line();
         assert!(line.starts_with("'/usr/bin/sudo' '-n' '--' '/usr/bin/systemd-run' '--unit=ossiframe-op-x-0' '--service-type=exec' '--remain-after-exit' '--quiet' '--' '/usr/bin/env'"));
         assert!(!line.contains("'-E'") && !line.contains("--collect"));
+        assert!(!line.contains("--uid"));
+    }
+    #[test]
+    fn run_as_step_is_launched_with_uid_and_gid_of_the_user() {
+        let u = ossiframe_core::LinuxUserName::parse("ossi-blog").unwrap();
+        let step = CommandSpec::run_as(
+            u,
+            "/usr/bin/composer",
+            &["install"],
+            Duration::from_secs(60),
+        )
+        .unwrap();
+        let line = launch_command("ossiframe-op-x-0", &step).to_command_line();
+        assert!(line.starts_with("'/usr/bin/sudo' '-n' '--' '/usr/bin/systemd-run' '--unit=ossiframe-op-x-0' '--uid=ossi-blog' '--gid=ossi-blog' '--service-type=exec'"));
+        assert!(line.contains("'--' '/usr/bin/composer' 'install'"));
     }
 
     #[test]

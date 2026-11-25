@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-app-deploy-key-status"
+description = "Enables the app_deploy_key_status command without any pre-configured scope."
+commands.allow = ["app_deploy_key_status"]
+
+[[permission]]
+identifier = "deny-app-deploy-key-status"
+description = "Denies the app_deploy_key_status command without any pre-configured scope."
+commands.deny = ["app_deploy_key_status"]

@@ -11,4 +11,4 @@ mod engine_tests;
 pub mod plans;
 pub mod reconcile;
 
-pub use commands::{PROVISION_COMMAND_NAMES, Provisioning, setup};
+pub use commands::{PROVISION_COMMAND_NAMES, Provisioning, setup, setup_with};

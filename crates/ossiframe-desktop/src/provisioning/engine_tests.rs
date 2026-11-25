@@ -146,6 +146,11 @@ impl Executor for Fake {
         if self.dead.load(Ordering::SeqCst) {
             return Err(ExecError::ConnectionLost);
         }
+        if spec.program().ends_with("drop-link") {
+            // The connection drops while this command is in flight.
+            self.disconnect();
+            return Err(ExecError::ConnectionLost);
+        }
         let a = spec.args();
         let last = a.last().map(String::as_str).unwrap_or("");
         let is_lock = a.iter().any(|x| x.contains("ossiframe-provision-lock"));
@@ -262,6 +267,13 @@ impl Executor for Fake {
         if prog.ends_with("dpkg-query") {
             return out(0, &lk(&self.probes).pkg_out.clone());
         }
+        if prog.ends_with("tee")
+            && let Some(input) = spec.stdin()
+        {
+            // A client that quotes its input back, as a database error does.
+            lk(&self.log).push(format!("stdin-present:{}", input.len()));
+            return out(0, &String::from_utf8_lossy(input));
+        }
         out(0, "")
     }
 }
@@ -281,6 +293,8 @@ impl ServerLink for Fake {
 struct FakeProv {
     recheck: Mutex<Result<(), Vec<Drift>>>,
     gate: Mutex<Result<String, String>>,
+    /// When set, the gate runs this command through the executor first.
+    gate_cmd: Mutex<Option<CommandSpec>>,
     checks: Mutex<Vec<CheckResult>>,
 }
 
@@ -324,11 +338,15 @@ impl Provisioner for FakeProv {
     }
     async fn gate(
         &self,
-        _: &dyn Executor,
-        _: &CancelToken,
+        exec: &dyn Executor,
+        cancel: &CancelToken,
         _: &Plan,
         _: &str,
     ) -> Result<String, String> {
+        let cmd = lk(&self.gate_cmd).clone();
+        if let Some(cmd) = cmd {
+            exec.run(&cmd, cancel).await.map_err(|e| e.to_string())?;
+        }
         lk(&self.gate).clone()
     }
     async fn verify(&self, _: &dyn Executor, _: &CancelToken, _: &Plan) -> Vec<CheckResult> {
@@ -359,6 +377,7 @@ fn step(id: &str, mode: StepMode, deadline_ms: u64) -> PlanStep {
         .unwrap(),
         mode,
         deadline: Duration::from_millis(deadline_ms),
+        requires_stdin: false,
     }
 }
 
@@ -375,6 +394,7 @@ fn plan_with(steps: Vec<PlanStep>) -> Plan {
             port: 22,
             user: "root".into(),
             host_key_sha256: KEY.into(),
+            app_id: None,
         },
         os: "ubuntu 24.04".into(),
         components: vec!["web".into()],
@@ -423,6 +443,7 @@ fn harness(steps: Vec<PlanStep>) -> H {
     let prov = Arc::new(FakeProv {
         recheck: Mutex::new(Ok(())),
         gate: Mutex::new(Ok("gate evidence".into())),
+        gate_cmd: Mutex::default(),
         checks: Mutex::new(vec![check(CheckStatus::Pass, true)]),
     });
     let events = Arc::new(Rec(Mutex::default()));
@@ -481,6 +502,113 @@ fn statuses(h: &H, id: &str) -> Vec<String> {
         .collect()
 }
 
+fn stdin_step(with_stdin: bool) -> PlanStep {
+    let mut command =
+        CommandSpec::privileged("/usr/bin/tee", &["/etc/x"], Duration::from_secs(5)).unwrap();
+    if with_stdin {
+        command = command.with_stdin(b"s3cret-input".to_vec()).unwrap();
+    }
+    PlanStep {
+        id: "write-secret".into(),
+        title: "write-secret".into(),
+        command,
+        mode: StepMode::Durable,
+        deadline: Duration::from_secs(5),
+        requires_stdin: true,
+    }
+}
+/// No stored text of the operation may contain the stdin bytes.
+fn assert_no_stdin_stored(h: &H, id: &str) {
+    let op = format!("{:?}", h.store.get_operation(id).unwrap());
+    let steps = format!("{:?}", h.store.get_steps(id).unwrap());
+    let events = format!("{:?}", h.store.get_events(id).unwrap());
+    let plan = serde_json::to_string(&h.plan).unwrap();
+    for t in [op, steps, events, plan, h.fake.lines().join("\n")] {
+        assert!(!t.contains("s3cret-input"));
+    }
+}
+#[tokio::test]
+async fn a_stdin_step_runs_directly_and_never_stores_its_stdin() {
+    let h = harness(vec![stdin_step(true)]);
+    let id = run_plan(&h).await;
+    assert_eq!(state(&h, &id), OperationState::Succeeded);
+    let lines = h.fake.lines();
+    let tee: Vec<_> = lines
+        .iter()
+        .filter(|l| l.contains("'/usr/bin/tee'"))
+        .collect();
+    assert_eq!(tee.len(), 1, "run once, directly");
+    assert!(!tee[0].contains("systemd-run"));
+    assert_eq!(*lk(&h.fake.launches), 0);
+    assert_no_stdin_stored(&h, &id);
+}
+#[tokio::test]
+async fn a_stdin_step_that_echoes_its_input_has_its_output_withheld() {
+    let h = harness(vec![stdin_step(true)]);
+    let id = run_plan(&h).await;
+    assert_eq!(state(&h, &id), OperationState::Succeeded);
+    let steps = h.store.get_steps(&id).unwrap();
+    assert!(steps[0].output.as_deref().unwrap().contains("withheld"));
+    assert_no_stdin_stored(&h, &id);
+}
+#[tokio::test]
+async fn a_stdin_step_without_its_stdin_is_refused_and_nothing_runs() {
+    // As after a reload from the stored plan: stdin is not serialized.
+    let h = harness(vec![stdin_step(false)]);
+    let id = run_plan(&h).await;
+    assert_eq!(state(&h, &id), OperationState::Failed);
+    assert!(
+        h.store
+            .get_operation(&id)
+            .unwrap()
+            .error
+            .unwrap()
+            .contains("re-plan required")
+    );
+    assert!(!h.fake.any("'/usr/bin/tee'"));
+    assert_no_stdin_stored(&h, &id);
+}
+#[tokio::test]
+async fn stdin_reaches_the_engine_from_memory_and_a_reloaded_plan_refuses_the_step() {
+    let h = harness(vec![stdin_step(true)]);
+    // The approved plan comes from the in-memory PlanStore with its stdin.
+    let approved = approve(&h);
+    assert!(approved.plan().steps[0].command.has_stdin());
+    let started = h.engine.start(approved, h.fake.clone()).await.unwrap();
+    started.task.await.unwrap();
+    let id = started.operation_id;
+    assert_eq!(state(&h, &id), OperationState::Succeeded);
+    assert!(h.fake.any("stdin-present:12"), "the executor got the stdin");
+    // What SQLite holds has no stdin, so a plan read back cannot run the step.
+    let stored = h.store.get_operation(&id).unwrap();
+    assert!(!stored.plan_json.contains("s3cret-input"));
+    let reloaded: Plan = serde_json::from_str(&stored.plan_json).unwrap();
+    assert!(reloaded.steps[0].requires_stdin && !reloaded.steps[0].command.has_stdin());
+    let ps = PlanStore::default();
+    let handle = ps.insert(reloaded);
+    let approved = ps
+        .take_approved(
+            SERVER,
+            &handle.id,
+            &handle.digest,
+            &ApprovalContext {
+                identity: identity(KEY),
+                connected: true,
+                busy: false,
+            },
+        )
+        .unwrap();
+    let started = h.engine.start(approved, h.fake.clone()).await.unwrap();
+    started.task.await.unwrap();
+    assert_eq!(state(&h, &started.operation_id), OperationState::Failed);
+    let ran = h
+        .fake
+        .lines()
+        .iter()
+        .filter(|l| l.contains("'/usr/bin/tee'"))
+        .count();
+    assert_eq!(ran, 1, "the reloaded plan ran nothing");
+}
 // ---- start --------------------------------------------------------------------------
 
 #[tokio::test]
@@ -753,6 +881,25 @@ async fn failed_gate_fails_before_the_next_step() {
     assert_eq!(state(&h, &id), OperationState::Failed);
     assert_eq!(statuses(&h, &id), ["succeeded", "failed", "skipped"]);
     assert_eq!(*lk(&h.fake.launches), 1);
+}
+
+#[tokio::test]
+async fn gate_that_loses_the_connection_ends_in_unknown_outcome() {
+    let h = harness(vec![
+        step("site-apply", StepMode::Gate, 1_000),
+        durable("apt-install"),
+    ]);
+    // A privileged command inside the gate loses the connection.
+    *lk(&h.prov.gate_cmd) = Some(
+        CommandSpec::privileged("/usr/bin/drop-link", &["x"], Duration::from_secs(5)).unwrap(),
+    );
+    *lk(&h.prov.gate) = Err("never reached".into());
+    let id = run_plan(&h).await;
+    assert_eq!(state(&h, &id), OperationState::UnknownOutcome);
+    assert_eq!(statuses(&h, &id), ["unknown", "pending"]);
+    // Nothing was retried or launched, and the lock is kept.
+    assert_eq!(*lk(&h.fake.launches), 0);
+    assert!(!h.fake.lock_stopped());
 }
 
 #[tokio::test]

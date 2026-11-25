@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-app-types"
+description = "Enables the app_types command without any pre-configured scope."
+commands.allow = ["app_types"]
+
+[[permission]]
+identifier = "deny-app-types"
+description = "Denies the app_types command without any pre-configured scope."
+commands.deny = ["app_types"]

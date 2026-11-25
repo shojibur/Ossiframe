@@ -10,5 +10,5 @@
       "react/jsx-runtime": ["./node_modules/@types/react/jsx-runtime"]
     }
   },
-  "include": ["src", "vite.config.ts", "node-url.d.ts", "../../modules/linux-inventory/ui", "../../modules/ubuntu-provisioning/ui"]
+  "include": ["src", "vite.config.ts", "node-url.d.ts", "../../modules/linux-inventory/ui", "../../modules/ubuntu-provisioning/ui", "../../modules/app-deploy/ui"]
 }

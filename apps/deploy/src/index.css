@@ -2,3 +2,4 @@
 @source "../../../packages/ui/src";
 @source "../../../modules/linux-inventory/ui";
 @source "../../../modules/ubuntu-provisioning/ui";
+@source "../../../modules/app-deploy/ui";

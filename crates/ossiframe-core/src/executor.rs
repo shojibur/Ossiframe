@@ -60,8 +60,8 @@ pub trait Executor: Send + Sync {
 /// [`Privilege`] is not `User`.
 ///
 /// What it does: it inspects the `Privilege` field of each `CommandSpec`.
-/// `Privilege::Root` returns `ExecError::PrivilegeDenied` and the wrapped
-/// executor is not called. `Privilege::User` is passed through unchanged.
+/// `Privilege::Root` and `Privilege::RunAs` return
+/// `ExecError::PrivilegeDenied` and the wrapped executor is not called. `Privilege::User` is passed through unchanged.
 ///
 /// What it does not do: it is not a command classifier and not a sandbox.
 /// It does not stop a `User`-level command from changing files or state the
@@ -102,7 +102,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn read_only_denies_root_and_passes_user() {
+    async fn read_only_denies_root_and_run_as_and_passes_user() {
         let inner = Recorder(AtomicUsize::new(0));
         let guard = ReadOnly(&inner);
         let cancel = CancelToken::new();
@@ -111,6 +111,14 @@ mod tests {
         let root = CommandSpec::privileged("/usr/bin/true", &[], t).unwrap();
         assert_eq!(
             guard.run(&root, &cancel).await.unwrap_err(),
+            ExecError::PrivilegeDenied
+        );
+        assert_eq!(inner.0.load(Ordering::SeqCst), 0);
+
+        let who = crate::ident::LinuxUserName::parse("ossi-app").unwrap();
+        let run_as = CommandSpec::run_as(who, "/usr/bin/true", &[], t).unwrap();
+        assert_eq!(
+            guard.run(&run_as, &cancel).await.unwrap_err(),
             ExecError::PrivilegeDenied
         );
         assert_eq!(inner.0.load(Ordering::SeqCst), 0);

@@ -27,6 +27,19 @@
     "allow-provision-mark-resolved",
     "allow-provision-release-stale-lock",
     "allow-provision-get-operation",
-    "allow-provision-list-operations"
+    "allow-provision-list-operations",
+    "allow-app-types",
+    "allow-app-list",
+    "allow-app-get",
+    "allow-app-create-plan",
+    "allow-app-redeploy-plan",
+    "allow-app-rollback-plan",
+    "allow-app-remove-plan",
+    "allow-app-approve-plan",
+    "allow-app-get-env",
+    "allow-app-set-env",
+    "allow-app-list-releases",
+    "allow-app-deploy-key-status",
+    "allow-app-check-access"
   ]
 }

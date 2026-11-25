@@ -47,7 +47,19 @@ export type PlanReason =
   | "serverInUse"
   | "blocked"
   | "rePlanRequired"
-  | "notSupported";
+  | "notSupported"
+  | "appNotFound"
+  | "domainInUse"
+  | "slugInUse"
+  | "gitHostKeyUnconfirmed";
+
+/** A scanned SSH host key of a Git host. `sha256` is `SHA256:...`. */
+export interface GitHostFingerprint {
+  host: string;
+  port: number;
+  keyType: string;
+  sha256: string;
+}
 
 export type IpcError =
   | { kind: "validation"; field: string; message: string }
@@ -77,7 +89,13 @@ export type IpcError =
   | { kind: "confirmationMismatch" }
   | { kind: "protocol"; message: string }
   | { kind: "operationFailed"; message: string }
-  | { kind: "plan"; reason: PlanReason; message: string }
+  | {
+      kind: "plan";
+      reason: PlanReason;
+      message: string;
+      /** Only present for `gitHostKeyUnconfirmed`. */
+      fingerprints?: GitHostFingerprint[];
+    }
   | { kind: "internal" };
 
 export interface OsInfo {

@@ -39,6 +39,8 @@ export interface PlanTarget {
   port: number;
   user: string;
   hostKeySha256: string;
+  /** Application the plan belongs to. Absent for server provisioning plans. */
+  appId?: string;
 }
 
 export interface PackageChange {

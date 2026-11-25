@@ -30,8 +30,8 @@ use async_trait::async_trait;
 use ossiframe_core::command::{CommandSpec, Privilege};
 use ossiframe_core::executor::{CancelToken, ExecError, ExecResult, Executor};
 use ossiframe_core::provision::{
-    CheckResult, CheckStatus, ComponentVerdict, Drift, Event as StateEvent, OperationState, Plan,
-    PlanStep, Provisioner, StepMode, next,
+    AppRecovery, AppRecoveryVerdict, CheckResult, CheckStatus, ComponentVerdict, Drift,
+    Event as StateEvent, OperationState, Plan, PlanStep, Provisioner, StepMode, next,
 };
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
@@ -366,7 +366,14 @@ impl Engine {
             .insert_operation(&NewOperation {
                 id: op_id.clone(),
                 identity: snapshot.clone(),
-                kind: "provision".into(),
+                // Plans that belong to an application are `app-deploy`
+                // operations, so S04's preflight history ignores them.
+                kind: if target.app_id.is_some() {
+                    "app-deploy"
+                } else {
+                    "provision"
+                }
+                .into(),
                 plan_digest: approved.digest().to_owned(),
                 plan_json: canonical_json(&plan),
             })
@@ -541,11 +548,38 @@ impl Engine {
         if !ctx.identity_ok() {
             return Err(EngineError::IdentityMismatch);
         }
-        let report = EvidenceReport::from_set(&ev);
+        let mut report = EvidenceReport::from_set(&ev);
+        let app = ctx.app_recovery().await;
+        if let Some(a) = &app {
+            report.push(
+                "application state",
+                format!("{:?}: {}", a.verdict, a.detail),
+            );
+        }
         let decision = reconcile::decide(&facts, &ev, &ctx.plan);
         let unit = recorded_unit.as_deref();
         let summary = match decision {
-            Decision::Stay(reason) => reason,
+            // The interrupted step cannot be read back, but the application
+            // itself shows the release is live and healthy: verification
+            // decides.
+            Decision::Stay(_)
+                if app
+                    .as_ref()
+                    .is_some_and(|a| a.verdict == AppRecoveryVerdict::Deployed) =>
+            {
+                ctx.skip_pending();
+                ctx.complete_by_verification("the application state shows the release is live")
+                    .await;
+                "the application shows the new release is live; verification decides the outcome"
+                    .to_owned()
+            }
+            Decision::Stay(reason) => match &app {
+                Some(a) if a.verdict == AppRecoveryVerdict::NotSwitched => format!(
+                    "{reason}. The application is still on the previous release ({})",
+                    a.detail
+                ),
+                _ => reason,
+            },
             Decision::NeverLaunched { next } => {
                 ctx.skip_pending();
                 if rec.cancel_requested {
@@ -632,7 +666,13 @@ impl Engine {
         if !ctx.identity_ok() {
             return Err(EngineError::IdentityMismatch);
         }
-        let report = EvidenceReport::from_set(&ev);
+        let mut report = EvidenceReport::from_set(&ev);
+        if let Some(a) = ctx.app_recovery().await {
+            report.push(
+                "application state",
+                format!("{:?}: {}", a.verdict, a.detail),
+            );
+        }
         if let Err(refusal) = check_stale_release(false, &ev.stale()) {
             ctx.event(
                 "mark-resolved-refused",
@@ -697,6 +737,48 @@ fn step_facts(plan: &Plan, rows: &[StepRecord]) -> Vec<StepFacts> {
                 .to_owned(),
         })
         .collect()
+}
+
+/// Executor wrapper for a gate step. Records whether a command that may
+/// change the server (any privilege above `User`, or one with stdin) was
+/// started, and whether one of them ended with an unknown outcome.
+struct GateWatch<'a> {
+    inner: &'a dyn Executor,
+    mutation_started: AtomicBool,
+    unknown: AtomicBool,
+}
+
+impl<'a> GateWatch<'a> {
+    fn new(inner: &'a dyn Executor) -> Self {
+        Self {
+            inner,
+            mutation_started: AtomicBool::new(false),
+            unknown: AtomicBool::new(false),
+        }
+    }
+
+    fn mutation_started(&self) -> bool {
+        self.mutation_started.load(Ordering::SeqCst)
+    }
+
+    fn unknown_outcome(&self) -> bool {
+        self.unknown.load(Ordering::SeqCst)
+    }
+}
+
+#[async_trait]
+impl Executor for GateWatch<'_> {
+    async fn run(&self, spec: &CommandSpec, cancel: &CancelToken) -> Result<ExecResult, ExecError> {
+        let mutating = !matches!(spec.privilege(), Privilege::User) || spec.has_stdin();
+        if mutating {
+            self.mutation_started.store(true, Ordering::SeqCst);
+        }
+        let r = self.inner.run(spec, cancel).await;
+        if mutating && matches!(&r, Err(e) if *e != ExecError::PrivilegeDenied) {
+            self.unknown.store(true, Ordering::SeqCst);
+        }
+        r
+    }
 }
 
 // ---- one operation -------------------------------------------------------------------
@@ -885,6 +967,11 @@ impl OpCtx {
                 );
             }
             let flow = match step.mode {
+                // A step with stdin runs directly: `systemd-run` does not
+                // forward stdin, and stdin is never persisted.
+                StepMode::Durable if step.requires_stdin || step.command.has_stdin() => {
+                    self.run_stdin_step(idx, step).await
+                }
                 StepMode::Gate => self.run_gate(idx, step).await,
                 StepMode::Foreground => self.run_foreground(idx, step).await,
                 StepMode::Durable => self.run_durable(idx, step).await,
@@ -900,15 +987,34 @@ impl OpCtx {
         let mut rec = step_row(idx, step, None, "running");
         rec.started_at = Some(now());
         self.put_step(&rec);
+        // A gate runs a sequence of commands through the executor and returns
+        // only text, so the engine watches the executor itself: a command
+        // that may change the server and ended without a definite result
+        // (lost connection, timeout, channel error) leaves the outcome unknown.
+        let watch = GateWatch::new(self.exec());
         let res = tokio::time::timeout(
             step.deadline,
             self.eng
                 .provisioner
-                .gate(self.exec(), &self.token, &self.plan, &step.id),
+                .gate(&watch, &self.token, &self.plan, &step.id),
         )
-        .await
-        .unwrap_or_else(|_| Err("the check timed out".to_owned()));
+        .await;
         rec.finished_at = Some(now());
+        let unknown = match &res {
+            Ok(Ok(_)) => false,
+            Ok(Err(_)) => watch.unknown_outcome(),
+            // The future was dropped mid-command.
+            Err(_) => watch.mutation_started(),
+        };
+        if unknown {
+            rec.status = "unknown".into();
+            self.put_step(&rec);
+            return Flow::Lost(format!(
+                "check '{}' may have changed the server and its outcome is unknown; it is not retried",
+                step.title
+            ));
+        }
+        let res = res.unwrap_or_else(|_| Err("the check timed out".to_owned()));
         match res {
             Ok(text) => {
                 rec.status = "succeeded".into();
@@ -929,6 +1035,21 @@ impl OpCtx {
         }
     }
 
+    /// Runs a step that needs stdin directly over the channel, with its own
+    /// timeout and the usual cancellation. A step that requires stdin but
+    /// has none (a plan reloaded from storage) is refused and nothing runs.
+    async fn run_stdin_step(&mut self, idx: u32, step: &PlanStep) -> Flow {
+        if step.requires_stdin && !step.command.has_stdin() {
+            let mut rec = step_row(idx, step, None, "failed");
+            rec.finished_at = Some(now());
+            self.put_step(&rec);
+            return Flow::Failed(format!(
+                "step '{}' needs input that is not stored with the plan: re-plan required. Nothing was run.",
+                step.title
+            ));
+        }
+        self.run_foreground(idx, step).await
+    }
     async fn run_foreground(&mut self, idx: u32, step: &PlanStep) -> Flow {
         let mut rec = step_row(idx, step, None, "running");
         rec.started_at = Some(now());
@@ -944,7 +1065,13 @@ impl OpCtx {
                 let ok = r.exit.success();
                 rec.status = if ok { "succeeded" } else { "failed" }.into();
                 self.put_step(&rec);
-                self.put_output(idx, &format!("{}\n{}", r.stdout, r.stderr));
+                // A step that received stdin may echo it (a database client
+                // quotes the statement in an error), so its output is not kept.
+                if step.requires_stdin || step.command.has_stdin() {
+                    self.put_output(idx, "(output withheld: the step received secret input)");
+                } else {
+                    self.put_output(idx, &format!("{}\n{}", r.stdout, r.stderr));
+                }
                 if ok {
                     Flow::Done
                 } else {
@@ -966,7 +1093,7 @@ impl OpCtx {
 
     async fn run_durable(&mut self, idx: u32, step: &PlanStep) -> Flow {
         let unit = unit_name(&self.id, idx);
-        if step.command.privilege() != Privilege::Root {
+        if matches!(step.command.privilege(), Privilege::User) {
             let mut rec = step_row(idx, step, None, "failed");
             rec.finished_at = Some(now());
             self.put_step(&rec);
@@ -1236,6 +1363,16 @@ impl OpCtx {
         if let Some(j) = journal {
             self.put_output(idx, &j);
         }
+    }
+
+    /// Real application state for an app operation. `None` for a plan
+    /// without an `app_id` and for a module with no such evidence.
+    async fn app_recovery(&self) -> Option<AppRecovery> {
+        self.plan.target.app_id.as_ref()?;
+        self.eng
+            .provisioner
+            .app_recovery(self.exec(), &self.token, &self.plan)
+            .await
     }
 
     async fn complete_by_verification(&mut self, why: &str) {

@@ -292,6 +292,7 @@ mod tests {
                 port: 22,
                 user: "deploy".into(),
                 host_key_sha256: "k1".into(),
+                app_id: None,
             },
             os: "ubuntu 24.04".into(),
             components: vec!["web".into()],
@@ -315,6 +316,7 @@ mod tests {
                     .unwrap(),
                 mode: StepMode::Durable,
                 deadline: Duration::from_secs(60),
+                requires_stdin: false,
             }],
             preconditions: Preconditions {
                 os_version: "24.04".into(),

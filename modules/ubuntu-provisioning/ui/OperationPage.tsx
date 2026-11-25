@@ -166,6 +166,7 @@ function UnknownOutcome({ op, connected }: { op: OperationDetailDto; connected: 
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<{ text: string; evidence: EvidenceReport } | null>(null);
   const [confirm, setConfirm] = useState(false);
+  const isApp = op.kind === "app-deploy";
 
   async function reconcile() {
     setBusy("reconcile");
@@ -198,9 +199,20 @@ function UnknownOutcome({ op, connected }: { op: OperationDetailDto; connected: 
   return (
     <Section title="Outcome unknown">
       <Notice tone="warn">
-        Ossiframe lost track of this operation, so a package command may still be running or may have stopped part way. Nothing is
-        retried automatically. Reconcile reads the server and reports what it can prove. If it cannot decide, inspect the server
-        yourself (for example <span className="font-mono">dpkg --audit</span> and running apt processes), then close the operation.
+        {isApp ? (
+          <>
+            Ossiframe lost track of this operation, so the deployment may still be running or may have partly changed the app.
+            Nothing is retried automatically. Reconcile checks the app&apos;s current release, site and pool and reports what it can
+            prove. If it cannot decide, inspect the server yourself, then close the operation.
+          </>
+        ) : (
+          <>
+            Ossiframe lost track of this operation, so a package command may still be running or may have stopped part way. Nothing
+            is retried automatically. Reconcile reads the server and reports what it can prove. If it cannot decide, inspect the
+            server yourself (for example <span className="font-mono">dpkg --audit</span> and running apt processes), then close the
+            operation.
+          </>
+        )}
       </Notice>
       {error && <Notice tone="error">{error}</Notice>}
       <div className="flex flex-wrap gap-2">
@@ -240,8 +252,10 @@ function UnknownOutcome({ op, connected }: { op: OperationDetailDto; connected: 
               Server: {op.server.name} ({op.server.user}@{op.server.host}:{op.server.port})
             </p>
             <p>
-              The app collects its own fresh evidence first. It refuses if an apt or dpkg process is running, a package lock is held
-              or an Ossiframe step unit is still active. Your decision and the evidence are recorded in the operation history.
+              {isApp
+                ? "The app collects its own fresh evidence first. "
+                : "The app collects its own fresh evidence first. It refuses if an apt or dpkg process is running, a package lock is held or an Ossiframe step unit is still active. "}
+              Your decision and the evidence are recorded in the operation history.
             </p>
           </div>
         </Dialog>

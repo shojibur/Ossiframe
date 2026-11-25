@@ -204,6 +204,36 @@ mod tests {
         assert!(line.contains("features = [\"tauri\"]"), "{line}");
     }
 
+    // Application deployment boundary (S05): `app_*` commands belong to Deploy.
+    #[test]
+    fn no_app_command_in_capability_manifest_or_handler() {
+        for (what, text) in [
+            ("capability", include_str!("../capabilities/main.json")),
+            ("build.rs", include_str!("../build.rs")),
+            ("invoke handler source", production_source()),
+        ] {
+            // A command name starts an identifier or a quoted string; the
+            // `.app_manifest(` builder call in build.rs is not a command.
+            for (i, _) in text.match_indices("app_") {
+                let prev = text[..i].chars().next_back();
+                let is_name_start =
+                    !matches!(prev, Some(c) if c.is_alphanumeric() || c == '_' || c == '.');
+                assert!(!is_name_start, "{what} contains an app_* name at byte {i}");
+            }
+            assert!(
+                !text.contains("allow-app-"),
+                "{what} grants an app-* command"
+            );
+        }
+    }
+
+    #[test]
+    fn manifest_does_not_depend_on_app_deploy_module() {
+        let toml = include_str!("../Cargo.toml");
+        assert!(!toml.contains("ossiframe-mod-app-deploy"));
+        assert!(!toml.contains("app_deploy"));
+    }
+
     #[test]
     fn capability_has_no_dialog_or_fs_permissions() {
         let text = include_str!("../capabilities/main.json");

@@ -1,0 +1,386 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "1.1 Add `LinuxUserName`, `RunAs` and the app identifier types": [
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795607639783
+      },
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795607652840
+      },
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795607877324
+      }
+    ],
+    "1.2 Add `stdin` to `CommandSpec` and the executor": [
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795607639898
+      },
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795607885932
+      },
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795608056661
+      }
+    ],
+    "1.3 Add `PlanTarget.app_id`": [
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795607639996
+      },
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795607886133
+      },
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795608057013
+      }
+    ],
+    "2.1 `apps` and `releases` tables and store methods": [
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795607640058
+      },
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795608064242
+      },
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795608261468
+      }
+    ],
+    "3.1 Crate, `AppType`, `ManagedPath`, `EntryFile` and content-write helper": [
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795607640125
+      },
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795608064870
+      },
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795608261779
+      }
+    ],
+    "3.2 Preflight": [
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795607640234
+      },
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795608267789
+      },
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795608462926
+      }
+    ],
+    "3.3 Create_Plan: user, pool, site, database": [
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795607640323
+      },
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795608463145
+      },
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795609147364
+      }
+    ],
+    "3.4 Git access: deploy key, pinned host keys, gate": [
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795607640404
+      },
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795609147938
+      },
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795609573976
+      }
+    ],
+    "3.5 Build steps, boot check, release switch, Redeploy_Plan and Rollback_Plan": [
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795607640482
+      },
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795609574985
+      },
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795610059415
+      }
+    ],
+    "3.6 Remove_Plan and post-switch verification": [
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795607641003
+      },
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795610066095
+      },
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795610597124
+      }
+    ],
+    "3.7 `.env` read, write and redaction": [
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795607641555
+      },
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795609576116
+      },
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795610059745
+      }
+    ],
+    "4.1 `app_*` commands in `ossiframe-desktop`": [
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795607641618
+      },
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795610597412
+      },
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795611857167
+      }
+    ],
+    "4.2 Typed client wrappers (`packages/client`)": [
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795607641681
+      },
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795611857504
+      },
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795611947466
+      }
+    ],
+    "5. Doctor drift confirmation": [
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795607641739
+      },
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795611857957
+      },
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795611948420
+      }
+    ],
+    "6.1 App list, create flow and approval": [
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795607641800
+      },
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795611955237
+      },
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795612306956
+      }
+    ],
+    "6.2 App detail: deploy, rollback, environment, removal": [
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795607641857
+      },
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795612307496
+      },
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795612589584
+      }
+    ],
+    "6.3 Consolidated quality gate": [
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795607641954
+      },
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795612589987
+      },
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795613109406
+      }
+    ],
+    "7.1 STOP: request explicit approval before any mutation": [
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795607642029
+      },
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795613110313
+      },
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795613350447
+      }
+    ],
+    "7.2 Create and verify a Static or Php app": [
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795607642093
+      },
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795613358218
+      }
+    ],
+    "7.3 Create and verify a Laravel app with a database": [
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795607642146
+      }
+    ],
+    "7.4 Boot check failure, redeploy and rollback": [
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795607642236
+      }
+    ],
+    "7.5 Removal and Doctor scope check": [
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795607642303
+      }
+    ],
+    "8. Verification record and roadmap": [
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795607642357
+      }
+    ],
+    "1. Core additions (`crates/ossiframe-core`, `crates/ossiframe-ssh`)": [
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795608057107
+      }
+    ],
+    "2. Desktop store (`crates/ossiframe-desktop`)": [
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795608261609
+      }
+    ],
+    "3. `app-deploy` module (`modules/app-deploy`, `ossiframe-mod-app-deploy`)": [
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795610597266
+      }
+    ],
+    "4. Typed IPC commands and client wrappers": [
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795611947569
+      }
+    ],
+    "6. Deploy app UI and quality gate": [
+      {
+        "executionId": "a815ef09-bae9-4256-9c08-4c9967a2baf4",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795613109596
+      }
+    ]
+  }
+}

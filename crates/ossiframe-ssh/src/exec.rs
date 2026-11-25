@@ -10,8 +10,8 @@ use russh::{Channel, ChannelMsg};
 /// Authentication secrets are not kept here: they are dropped after login
 /// and are never part of a command, so they are not registered for output
 /// redaction. Output still goes through bounded capture and whole-output
-/// redaction; command-scoped secrets (sent over stdin) arrive with
-/// privileged execution in a later spec.
+/// redaction. A command's stdin is written, then EOF is sent, before output
+/// is read; stdin is never logged.
 pub struct SshExecutor {
     handle: Handle<HostKeyHandler>,
 }
@@ -69,12 +69,17 @@ async fn collect(
 async fn exchange(
     handle: &Handle<HostKeyHandler>,
     command: String,
+    stdin: Option<&[u8]>,
     slot: &mut Option<Channel<Msg>>,
     out: &mut BoundedBuffer,
     err: &mut BoundedBuffer,
 ) -> Result<Collected, russh::Error> {
     let ch = slot.insert(handle.channel_open_session().await?);
     ch.exec(true, command).await?;
+    if let Some(bytes) = stdin {
+        // `&[u8]` is an AsyncRead, so the bytes are not copied.
+        ch.data(bytes).await?;
+    }
     let _ = ch.eof().await;
     Ok(collect(ch, out, err).await)
 }
@@ -115,7 +120,7 @@ impl Executor for SshExecutor {
             biased;
             _ = cancel.cancelled() => Outcome::Cancelled,
             _ = tokio::time::sleep_until(deadline) => Outcome::Timeout,
-            r = exchange(&self.handle, spec.to_command_line(), &mut slot, &mut out, &mut err) => Outcome::Done(r),
+            r = exchange(&self.handle, spec.to_command_line(), spec.stdin(), &mut slot, &mut out, &mut err) => Outcome::Done(r),
         };
 
         let collected = match outcome {
