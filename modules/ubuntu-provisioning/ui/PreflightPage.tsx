@@ -1,6 +1,6 @@
 import { Button, KeyValue, Notice, errorMessage, localTime } from "@ossiframe/ui";
 import { CLASS_LABEL, Section, SUDO_LABEL, mb, useComponentList } from "./parts";
-import { effectiveSelection, runPreflight, useServerEntry } from "./store";
+import { preflightSelection, runPreflight, useServerEntry } from "./store";
 
 export function PreflightPage({ serverId, connected }: { serverId: string; connected: boolean }) {
   const entry = useServerEntry(serverId);
@@ -14,17 +14,20 @@ export function PreflightPage({ serverId, connected }: { serverId: string; conne
   return (
     <div className="flex flex-col gap-5">
       <p className="max-w-3xl text-sm text-slate-600 dark:text-slate-400">
-        Preflight reads the server and reports whether a base stack can be installed. It changes nothing. The only command run with
-        elevated rights is a check that passwordless sudo works. Installing later needs sudo without a password, which is
-        equivalent to root access for this user.
+        Preflight reads the server and tells you whether software can be installed. It changes nothing. The only command run with
+        elevated rights is a check that passwordless sudo works. Installing needs sudo without a password, which gives this user
+        root access.
       </p>
 
       <div className="flex gap-2">
-        <Button disabled={!connected || running || !list} onClick={() => list && void runPreflight(serverId, effectiveSelection(entry, list))}>
+        <Button disabled={!connected || running || !list} onClick={() => list && void runPreflight(serverId, preflightSelection(entry, list))}>
           {running ? "Running preflight…" : dto ? "Run again" : "Run preflight"}
         </Button>
       </div>
-      {!connected && <p className="text-sm text-slate-500">Connect to run preflight.</p>}
+      {!connected && <p className="text-sm text-slate-500">Connect to the server to run preflight.</p>}
+      {connected && !report && !running && !entry.error && (
+        <p className="text-sm text-slate-500">Preflight has not run yet for this connection.</p>
+      )}
       {listError && <Notice tone="error">{listError}</Notice>}
       {entry.error && entry.busy === null && !entry.plan && <Notice tone="error">{errorMessage(entry.error)}</Notice>}
 
@@ -32,9 +35,9 @@ export function PreflightPage({ serverId, connected }: { serverId: string; conne
         <>
           <Section title="Result" aside={`Observed ${localTime(report.observedAt)}`}>
             {dto.canProvision ? (
-              <Notice tone="info">No blocking findings. A plan can be created on the Software page.</Notice>
+              <Notice tone="info">Nothing is blocking. Choose what to install on the Software page.</Notice>
             ) : (
-              <Notice tone="error">Blocking findings were found. No plan can be created until they are resolved.</Notice>
+              <Notice tone="error">Installing is blocked until the problems below are fixed.</Notice>
             )}
             <KeyValue
               rows={[
@@ -49,7 +52,7 @@ export function PreflightPage({ serverId, connected }: { serverId: string; conne
           </Section>
 
           {blockers.length > 0 && (
-            <Section title="Blockers">
+            <Section title="Problems to fix">
               <ul className="flex flex-col gap-2">
                 {blockers.map((c) => (
                   <li key={c.id}>
@@ -73,7 +76,7 @@ export function PreflightPage({ serverId, connected }: { serverId: string; conne
 
           <Section title="Package sources">
             {report.packageSources.length === 0 ? (
-              <p className="text-sm text-slate-500">No enabled sources were reported.</p>
+              <p className="text-sm text-slate-500">No package sources were reported.</p>
             ) : (
               <ul className="space-y-1 font-mono text-[13px] break-all">
                 {report.packageSources.map((s, i) => (

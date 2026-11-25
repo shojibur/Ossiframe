@@ -301,6 +301,7 @@ mod tests {
             total_mem_mb: Some(4000),
             free_disk_mb: Some(40_000),
             package_sources: Vec::new(),
+            candidate_versions: BTreeMap::new(),
             sites: Vec::new(),
             conflicts: Vec::new(),
         };

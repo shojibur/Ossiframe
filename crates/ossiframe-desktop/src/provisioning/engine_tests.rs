@@ -403,6 +403,7 @@ fn plan_with(steps: Vec<PlanStep>) -> Plan {
             watched_listings: BTreeMap::new(),
             min_mem_mb: 1,
             min_disk_mb: 1,
+            server_managed: false,
         },
     }
 }

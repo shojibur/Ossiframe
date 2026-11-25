@@ -89,6 +89,7 @@ export interface Preconditions {
   watchedListings: Record<string, string[]>;
   minMemMb: number;
   minDiskMb: number;
+  serverManaged: boolean;
 }
 
 export interface Plan {
@@ -123,6 +124,8 @@ export interface PreflightReport {
   freeDiskMb: number | null;
   packageSources: string[];
   sites: string[];
+  /** Candidate version per component package, from the server's current APT lists. Information only. */
+  candidateVersions: Record<string, string>;
   conflicts: Conflict[];
 }
 
@@ -145,6 +148,8 @@ export interface ComponentInfo {
   title: string;
   description: string;
   requires: string[];
+  /** Packages that make up the component. */
+  packages: string[];
   optional: boolean;
 }
 

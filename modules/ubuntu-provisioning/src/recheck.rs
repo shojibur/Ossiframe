@@ -143,20 +143,29 @@ pub async fn run(exec: &dyn Executor, cancel: &CancelToken, plan: &Plan) -> Resu
     let secs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs());
-    let facts: Facts =
-        preflight::collect_facts(exec, cancel, preflight::rfc3339_utc(secs), &selected)
-            .await
-            .map_err(|e| {
-                let id = match e {
-                    OperationError::Exec(_) => "recheck-interrupted",
-                    _ => "recheck-failed",
-                };
-                vec![drift(
-                    id,
-                    format!("The server could not be re-checked: {e}"),
-                )]
-            })?;
-    let report = preflight::evaluate(&facts, &selected, &[]);
+    let facts: Facts = preflight::collect_facts(exec, cancel, preflight::rfc3339_utc(secs))
+        .await
+        .map_err(|e| {
+            let id = match e {
+                OperationError::Exec(_) => "recheck-interrupted",
+                _ => "recheck-failed",
+            };
+            vec![drift(
+                id,
+                format!("The server could not be re-checked: {e}"),
+            )]
+        })?;
+    // The Store is not available here. The plan records whether the server
+    // was classed managed, and the same history is repeated for the rules
+    // that depend on it (listener ownership).
+    let prior: &[ossiframe_core::PriorOperation] = if plan.preconditions.server_managed {
+        &[ossiframe_core::PriorOperation::Succeeded {
+            all_essential_passed: true,
+        }]
+    } else {
+        &[]
+    };
+    let report = preflight::evaluate(&facts, &selected, prior);
     let found = compare(plan, &report);
     if found.is_empty() { Ok(()) } else { Err(found) }
 }
@@ -258,5 +267,20 @@ mod tests {
         let changed = UBUNTU_SOURCES.replace("security.ubuntu.com", "ports.ubuntu.com");
         let ids = drift_ids(&plan, &fresh().over(K_UBUNTU_SRC, ok(&changed))).await;
         assert!(ids.contains(&"sources-changed".to_owned()), "{ids:?}");
+    }
+
+    #[tokio::test]
+    async fn managed_server_listeners_are_not_drift_but_unmanaged_ones_are() {
+        use crate::preflight::tests::{ALL_ACTIVE, POST_INSTALL_SS, VERIFIED, post_install};
+        let fake = post_install(POST_INSTALL_SS, &ALL_ACTIVE);
+        let (_, r) = crate::preflight::tests::run_with(&fake, &["redis"], &[VERIFIED])
+            .await
+            .unwrap();
+        let mut plan = build_plan(&r, &["redis".to_owned()]).unwrap();
+        assert!(plan.preconditions.server_managed);
+        assert_eq!(drift_ids(&plan, &fake).await, Vec::<String>::new());
+        plan.preconditions.server_managed = false;
+        let ids = drift_ids(&plan, &fake).await;
+        assert!(ids.contains(&"blocker-listener-80".to_owned()), "{ids:?}");
     }
 }

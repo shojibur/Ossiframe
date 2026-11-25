@@ -54,7 +54,7 @@ export function ApproveDialog({
           {toInstall.length ? (
             <p className="font-mono text-[13px] break-words">{toInstall.join(" ")}</p>
           ) : (
-            <p className="text-slate-600 dark:text-slate-400">None. The operation would only verify what is installed.</p>
+            <p className="text-slate-600 dark:text-slate-400">None. The operation only checks what is installed.</p>
           )}
         </div>
 
@@ -69,9 +69,11 @@ export function ApproveDialog({
 
         <div>
           <h3 className="mb-1 text-xs font-semibold text-slate-500 uppercase">Privileges</h3>
-          <p>
-            Runs as root through <span className="font-mono">sudo -n</span>. {plan.privileges.join(" ")}
-          </p>
+          {plan.privileges.length === 0 ? (
+            <p className="text-slate-600 dark:text-slate-400">No command runs as root.</p>
+          ) : (
+            <Bullets items={plan.privileges} />
+          )}
         </div>
 
         <div>
@@ -83,16 +85,21 @@ export function ApproveDialog({
 
         <div>
           <h3 className="mb-1 text-xs font-semibold text-slate-500 uppercase">Recovery limits</h3>
-          <Bullets items={plan.limitations} />
-          <ul className="mt-1 list-disc space-y-1 pl-5">
-            <li>APT may install additional dependency packages beyond the list above and runs the packages&apos; maintainer scripts as root.</li>
-            <li>There is no automatic rollback. If it fails or the outcome is unknown, you inspect the server and decide.</li>
-          </ul>
+          {/* The plan's own limitations already state: no rollback, APT dependencies and maintainer
+              scripts, services starting. They are shown once. A plan without packages runs no APT. */}
+          {plan.limitations.length ? (
+            <Bullets items={plan.limitations} />
+          ) : (
+            <p className="text-slate-600 dark:text-slate-400">No packages are installed, so there is nothing to roll back.</p>
+          )}
+          <p className="mt-1 text-slate-600 dark:text-slate-400">
+            If something fails or the outcome is unknown, you inspect the server and decide what to do next.
+          </p>
         </div>
 
         <p className="text-xs text-slate-500">
-          The plan digest ties your approval to the exact plan the backend created. It does not protect against a compromised
-          frontend. The digest is shown under technical details on the Plan page.
+          Your approval applies to exactly this plan. Its digest is under Technical details on the Plan page. The digest does not
+          protect against a compromised frontend.
         </p>
       </div>
     </Dialog>

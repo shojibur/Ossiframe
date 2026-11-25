@@ -158,6 +158,7 @@ pub fn infos() -> Vec<ComponentInfo> {
             title: c.title.to_owned(),
             description: c.description.to_owned(),
             requires: c.requires.iter().map(|r| (*r).to_owned()).collect(),
+            packages: c.packages.iter().map(|p| (*p).to_owned()).collect(),
             optional: c.optional,
         })
         .collect()

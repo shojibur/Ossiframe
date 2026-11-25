@@ -367,8 +367,12 @@ fn candidate_lines_are_parsed() {
                nginx:\n  Installed: (none)\n  Candidate: (none)\n";
     let m = parse_candidates(out, &req);
     assert_eq!(
-        (m["composer"], m["nginx"], m["ghost"]),
-        (true, false, false)
+        (
+            m["composer"].as_deref(),
+            m["nginx"].as_deref(),
+            m["ghost"].as_deref()
+        ),
+        (Some("2.7.1-2"), None, None)
     );
 }
 
@@ -524,6 +528,171 @@ async fn unknown_listener_owner_never_counts_as_owned() {
     let input = ["git"];
     let (_, r) = run_with(&base(ss_nginx()), &input, &managed).await.unwrap();
     assert!(blockers(&r).contains(&"listener-80"));
+}
+
+pub(crate) const POST_INSTALL_SS: &str = "\
+tcp LISTEN 0 4096 0.0.0.0:22 0.0.0.0:*\n\
+tcp LISTEN 0 511 0.0.0.0:80 0.0.0.0:*\n\
+tcp LISTEN 0 511 [::]:80 [::]:*\n\
+tcp LISTEN 0 151 127.0.0.1:3306 0.0.0.0:*\n\
+tcp LISTEN 0 70 127.0.0.1:33060 0.0.0.0:*\n";
+
+const POST_INSTALL_PACKAGES: &str = "git\tii \t1:2.43.0-1ubuntu7.3\n\
+nginx\tii \t1.24.0-2ubuntu7.21\n\
+php8.3-bcmath\tii \t8.3.6-0ubuntu0.24.04.14\n\
+php8.3-cli\tii \t8.3.6-0ubuntu0.24.04.14\n\
+php8.3-common\tii \t8.3.6-0ubuntu0.24.04.14\n\
+php8.3-curl\tii \t8.3.6-0ubuntu0.24.04.14\n\
+php8.3-gd\tii \t8.3.6-0ubuntu0.24.04.14\n\
+php8.3-intl\tii \t8.3.6-0ubuntu0.24.04.14\n\
+php8.3-mbstring\tii \t8.3.6-0ubuntu0.24.04.14\n\
+php8.3-mysql\tii \t8.3.6-0ubuntu0.24.04.14\n\
+php8.3-opcache\tii \t8.3.6-0ubuntu0.24.04.14\n\
+php8.3-sqlite3\tii \t8.3.6-0ubuntu0.24.04.14\n\
+php8.3-xml\tii \t8.3.6-0ubuntu0.24.04.14\n\
+php8.3-zip\tii \t8.3.6-0ubuntu0.24.04.14\n\
+php8.3-fpm\tii \t8.3.6-0ubuntu0.24.04.14\n\
+composer\tii \t2.7.1-2\n\
+mysql-server\tii \t8.0.46-0ubuntu0.24.04.5\n";
+
+fn units_json(units: &[&str]) -> String {
+    let items: Vec<String> = units
+        .iter()
+        .map(|u| format!(r#"{{"unit":"{u}","load":"loaded","active":"active","sub":"running"}}"#))
+        .collect();
+    format!("[{}]", items.join(","))
+}
+
+/// The server as the Deploy GUI left it after a verified install: packages
+/// present, units active, listeners visible without an owner (non-root `ss`).
+pub(crate) fn post_install(ss: &str, active: &[&str]) -> Fake {
+    fresh()
+        .over(K_DPKG, code(1, POST_INSTALL_PACKAGES, NO_MATCH))
+        .over(
+            K_INV_DPKG,
+            ok("nginx\t1.24.0\tii \nmysql-server\t8.0.46\tii \nphp8.3-fpm\t8.3.6\tii \n"),
+        )
+        .over(K_SVC, ok(&units_json(active)))
+        .over(K_SS, ok(ss))
+        .over(K_SITES, ok("/etc/nginx/sites-enabled/default\n"))
+}
+
+pub(crate) const ALL_ACTIVE: [&str; 4] = [
+    "ssh.service",
+    "nginx.service",
+    "php8.3-fpm.service",
+    "mysql.service",
+];
+
+pub(crate) const VERIFIED: PriorOperation = PriorOperation::Succeeded {
+    all_essential_passed: true,
+};
+
+#[tokio::test]
+async fn server_provisioned_by_ossiframe_has_no_blockers_with_hidden_listener_owners() {
+    let fake = post_install(POST_INSTALL_SS, &ALL_ACTIVE);
+    // The default selection and a Redis-only selection are both fine.
+    for selection in [DEFAULT_SELECTION, &["redis"][..]] {
+        let (_, r) = run_with(&fake, selection, &[VERIFIED]).await.unwrap();
+        assert_eq!(r.server_class, ServerClass::OssiframeManaged);
+        assert!(r.can_provision(), "{selection:?}: {:?}", r.conflicts);
+        assert!(blockers(&r).is_empty());
+    }
+}
+
+#[tokio::test]
+async fn report_carries_candidate_versions_for_installed_packages() {
+    let fake = post_install(POST_INSTALL_SS, &ALL_ACTIVE).over(
+        K_CAND,
+        ok(
+            "nginx:\n  Installed: 1.24.0-2ubuntu7.21\n  Candidate: 1.24.0-2ubuntu7.22\n\
+            redis-server:\n  Installed: (none)\n  Candidate: 5:7.0.15-1\n\
+            composer:\n  Installed: 2.7.1-2\n  Candidate: 2.7.1-2\n",
+        ),
+    );
+    let r = report(&fake, &[VERIFIED]).await;
+    assert_eq!(r.candidate_versions["nginx"], "1.24.0-2ubuntu7.22");
+    assert_eq!(r.candidate_versions["redis-server"], "5:7.0.15-1");
+    // Packages without a candidate are absent from the map, and an installed
+    // package without a candidate raises no warning.
+    assert!(!r.candidate_versions.contains_key("mysql-server"));
+    assert!(
+        !warnings(&r)
+            .iter()
+            .any(|w| w.starts_with("candidate-missing"))
+    );
+}
+
+#[tokio::test]
+async fn hidden_listener_owners_still_block_without_the_evidence() {
+    // Same listeners, no Ossiframe record: blocked and unmanaged.
+    let r = report(&post_install(POST_INSTALL_SS, &ALL_ACTIVE), &[]).await;
+    assert_eq!(r.server_class, ServerClass::ExistingUnmanaged);
+    assert!(!r.can_provision());
+    let b = blockers(&r);
+    for id in ["listener-80", "listener-3306", "listener-33060"] {
+        assert!(b.contains(&id), "{id}: {b:?}");
+    }
+    // A record that is not a verified success is not evidence either.
+    for prior in [
+        PriorOperation::Failed,
+        PriorOperation::Succeeded {
+            all_essential_passed: false,
+        },
+    ] {
+        let r = report(&post_install(POST_INSTALL_SS, &ALL_ACTIVE), &[prior]).await;
+        assert!(blockers(&r).contains(&"listener-80"), "{prior:?}");
+    }
+    // The unit of the component is not active: the listener is not explained.
+    let r = report(
+        &post_install(POST_INSTALL_SS, &["ssh.service", "php8.3-fpm.service"]),
+        &[VERIFIED],
+    )
+    .await;
+    let b = blockers(&r);
+    assert!(
+        b.contains(&"listener-80") && b.contains(&"listener-3306"),
+        "{b:?}"
+    );
+    // A listener on 80 with nginx not installed and an unknown owner blocks,
+    // even on a server with a verified record.
+    let fake = fresh().over(K_SS, ok("tcp LISTEN 0 511 0.0.0.0:80 0.0.0.0:*\n"));
+    let r = report(&fake, &[VERIFIED]).await;
+    assert!(blockers(&r).contains(&"listener-80"), "{:?}", r.conflicts);
+    // Same when nginx.service is active but its package is absent.
+    let fake = fake.over(K_SVC, ok(&units_json(&ALL_ACTIVE)));
+    let r = report(&fake, &[VERIFIED]).await;
+    assert!(blockers(&r).contains(&"listener-80"), "{:?}", r.conflicts);
+    // Listener ports of a component that is not installed are not explained
+    // by other components: redis port with only nginx installed.
+    let r = report(
+        &post_install(
+            &format!("{POST_INSTALL_SS}tcp LISTEN 0 511 127.0.0.1:6379 0.0.0.0:*\n"),
+            &ALL_ACTIVE,
+        ),
+        &[VERIFIED],
+    )
+    .await;
+    assert!(blockers(&r).contains(&"listener-6379"));
+}
+
+#[tokio::test]
+async fn plans_on_a_provisioned_server_install_only_what_is_missing() {
+    use crate::plan::plan;
+    let fake = post_install(POST_INSTALL_SS, &ALL_ACTIVE);
+    let same = DEFAULT_SELECTION;
+    let (_, r) = run_with(&fake, same, &[VERIFIED]).await.unwrap();
+    let sel: Vec<String> = same.iter().map(|s| (*s).to_owned()).collect();
+    let p = plan(&r, &sel).unwrap();
+    assert!(p.steps.is_empty() && p.packages.is_empty());
+    assert!(p.preconditions.server_managed);
+    // Redis: only redis-server.
+    let sel = ["redis"].map(String::from);
+    let (_, r) = run_with(&fake, &["redis"], &[VERIFIED]).await.unwrap();
+    let p = plan(&r, &sel).unwrap();
+    let names: Vec<_> = p.packages.iter().map(|c| c.name.as_str()).collect();
+    assert_eq!(names, ["redis-server"]);
+    assert!(!p.steps.is_empty());
 }
 
 #[tokio::test]

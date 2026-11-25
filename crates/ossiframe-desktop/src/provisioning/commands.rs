@@ -1097,6 +1097,7 @@ mod tests {
                     watched_listings: BTreeMap::new(),
                     min_mem_mb: 1,
                     min_disk_mb: 1,
+                    server_managed: false,
                 },
             })
         }
@@ -1146,6 +1147,7 @@ mod tests {
             total_mem_mb: Some(4096),
             free_disk_mb: Some(40_000),
             package_sources: vec![],
+            candidate_versions: BTreeMap::new(),
             sites: vec![],
             conflicts: if blocker {
                 vec![Conflict {

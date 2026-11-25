@@ -18,7 +18,7 @@ export function HistoryPage({ serverId }: { serverId: string; connected: boolean
     <div className="flex flex-col gap-4">
       {entry.error && <Notice tone="error">{errorMessage(entry.error)}</Notice>}
       {entry.history.length === 0 ? (
-        <p className="text-sm text-slate-500">No operations recorded for this server.</p>
+        <p className="text-sm text-slate-500">No operations yet. Plans you approve are listed here.</p>
       ) : (
         <Table head={["Created", "State", "Finished", "Error", ""]}>
           {entry.history.map((h) => (
@@ -27,7 +27,7 @@ export function HistoryPage({ serverId }: { serverId: string; connected: boolean
               <Td>
                 <OperationStateBadge state={h.state} />
               </Td>
-              <Td>{h.finishedAt ? localTime(h.finishedAt) : "n/a"}</Td>
+              <Td>{h.finishedAt ? localTime(h.finishedAt) : "Not finished"}</Td>
               <Td>{h.error ?? ""}</Td>
               <Td>
                 <Button

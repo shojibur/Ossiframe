@@ -110,8 +110,9 @@ pub struct Facts {
     pub sudo: SudoProbe,
     /// State of every component package.
     pub packages: Evidence<BTreeMap<String, PackageState>>,
-    /// Package name to "has an installation candidate".
-    pub candidates: Evidence<BTreeMap<String, bool>>,
+    /// Package name to its installation candidate version, `None` when it
+    /// has none. Covers every component package.
+    pub candidates: Evidence<BTreeMap<String, Option<String>>>,
     /// True when any package is half-installed, unpacked, half-configured,
     /// has triggers pending or awaited, or is flagged reinst-required
     /// (derived from `dpkg-query -W`; see `provision::dpkg_states_settled`).
@@ -260,10 +261,11 @@ pub fn parse_package_states(
     Ok(states)
 }
 
-/// Parses `apt-cache policy <pkgs>` into "has a candidate" per package.
+/// Parses `apt-cache policy <pkgs>` into the candidate version per package.
 /// Packages without an entry have no candidate.
-pub fn parse_candidates(stdout: &str, requested: &[String]) -> BTreeMap<String, bool> {
-    let mut out: BTreeMap<String, bool> = requested.iter().map(|p| (p.clone(), false)).collect();
+pub fn parse_candidates(stdout: &str, requested: &[String]) -> BTreeMap<String, Option<String>> {
+    let mut out: BTreeMap<String, Option<String>> =
+        requested.iter().map(|p| (p.clone(), None)).collect();
     let mut current: Option<String> = None;
     for line in stdout.lines() {
         if !line.starts_with(' ') {
@@ -271,7 +273,8 @@ pub fn parse_candidates(stdout: &str, requested: &[String]) -> BTreeMap<String, 
         } else if let (Some(name), Some(c)) = (&current, line.trim().strip_prefix("Candidate:"))
             && let Some(slot) = out.get_mut(name)
         {
-            *slot = c.trim() != "(none)" && !c.trim().is_empty();
+            let v = sources::clean(c.trim());
+            *slot = (v != "(none)" && !v.is_empty()).then_some(v);
         }
     }
     out
@@ -437,13 +440,12 @@ async fn read_sources(
     Ok(Ok(scan))
 }
 
-/// Collects all facts. `selected` decides which packages are queried for
-/// candidates. Cancel and a lost connection return an error and no facts.
+/// Collects all facts. Cancel and a lost connection return an error and no
+/// facts.
 pub async fn collect_facts(
     exec: &dyn Executor,
     cancel: &CancelToken,
     observed_at: String,
-    selected: &[&'static ComponentDef],
 ) -> Result<Facts, OperationError> {
     // Inventory facts.
     let info = inventory::collect(exec, cancel, observed_at.clone())
@@ -561,23 +563,16 @@ pub async fn collect_facts(
         },
     };
 
-    let to_check: Vec<String> = match &packages {
-        Ok(states) => selected
-            .iter()
-            .flat_map(|c| c.packages.iter())
-            .filter(|p| !matches!(states.get(**p), Some(PackageState::Installed { .. })))
-            .map(|p| (*p).to_owned())
-            .collect(),
-        Err(_) => Vec::new(),
-    };
-    let candidates = if to_check.is_empty() {
+    // Candidate versions of every component package, for the missing-candidate
+    // warning and for showing "update available". One read-only command.
+    let candidates = if packages.is_err() {
         Ok(BTreeMap::new())
     } else {
         let mut args: Vec<&str> = vec!["policy"];
-        args.extend(to_check.iter().map(String::as_str));
+        args.extend(all_packages.iter().map(String::as_str));
         stdout_of(exec, cancel, user("/usr/bin/apt-cache", &args), &[0])
             .await?
-            .map(|s| parse_candidates(&s, &to_check))
+            .map(|s| parse_candidates(&s, &all_packages))
     };
 
     // dpkg health without root: every package state from `dpkg-query -W`
@@ -770,6 +765,31 @@ fn service_packages() -> Vec<&'static str> {
         .filter(|c| !c.units.is_empty())
         .flat_map(|c| c.packages.iter().copied())
         .collect()
+}
+
+/// True when a listener on `comp`'s port is explained by the component itself:
+/// every package of the component is installed and every one of its systemd
+/// units is active. Without root, `ss` cannot show the owner of a socket held
+/// by another user (nginx, mysqld and redis run under their own users), so
+/// the active unit of the installed component is the evidence. The caller
+/// also requires a verified Ossiframe operation for this server. Missing
+/// evidence is never an explanation.
+fn component_explains_listener(facts: &Facts, comp: &str) -> bool {
+    let Some(def) = components::find(comp) else {
+        return false;
+    };
+    let (Ok(packages), Ok(units)) = (&facts.packages, &facts.active_units) else {
+        return false;
+    };
+    !def.units.is_empty()
+        && def
+            .packages
+            .iter()
+            .all(|p| matches!(packages.get(*p), Some(PackageState::Installed { .. })))
+        && def
+            .units
+            .iter()
+            .all(|u| units.contains(&format!("{u}.service")))
 }
 
 /// Pure rules. `prior` is the caller's evidence for this identity snapshot.
@@ -975,7 +995,18 @@ pub fn evaluate(
         Ok(_) => {}
     }
 
-    // Listeners. Unknown ownership never counts as owned.
+    // Listeners. Unknown ownership is never counted as owned by itself. A
+    // listener counts as owned only when its component is selected and `ss`
+    // names the expected process, or when the component is already installed
+    // by Ossiframe (see `component_explains_listener`).
+    let managed = prior.iter().any(|p| {
+        matches!(
+            p,
+            PriorOperation::Succeeded {
+                all_essential_passed: true
+            }
+        )
+    });
     match &facts.listeners {
         Err(e) => c.block(
             "listeners-evidence",
@@ -989,7 +1020,12 @@ pub fn evaluate(
                 else {
                     continue;
                 };
-                let owned = selected_ids.contains(comp) && l.process.as_deref() == Some(proc_name);
+                let explained = managed && component_explains_listener(facts, comp);
+                let named = l.process.as_deref() == Some(proc_name);
+                let owned = match &l.process {
+                    Some(_) => named && (selected_ids.contains(comp) || explained),
+                    None => explained,
+                };
                 if !owned && reported.insert(l.port) {
                     let who = match &l.process {
                         Some(p) => format!("process '{}'", sources::clean(p)),
@@ -998,7 +1034,8 @@ pub fn evaluate(
                     c.block(
                         format!("listener-{}", l.port),
                         format!(
-                            "Port {} is in use by {who}, not by a selected component.",
+                            "Port {} is in use by {who}, which is not a component Ossiframe \
+                             installed or is installing.",
                             l.port
                         ),
                     );
@@ -1062,6 +1099,11 @@ pub fn evaluate(
     }
 
     // Warnings.
+    let selected_missing: BTreeSet<&str> = selected
+        .iter()
+        .flat_map(|d| d.packages.iter().copied())
+        .filter(|p| !installed(p))
+        .collect();
     match &facts.apt_busy {
         Ok(true) => c.warn(
             "apt-busy",
@@ -1078,7 +1120,12 @@ pub fn evaluate(
     }
     match &facts.candidates {
         Ok(map) => {
-            for pkg in map.iter().filter(|(_, has)| !**has).map(|(p, _)| p) {
+            // Only packages that would be installed need a candidate.
+            for pkg in map
+                .iter()
+                .filter(|(p, v)| v.is_none() && selected_missing.contains(p.as_str()))
+                .map(|(p, _)| p)
+            {
                 c.warn(
                     format!("candidate-missing-{pkg}"),
                     format!("No installation candidate for {pkg} yet; package lists may be stale until apt-get update runs."),
@@ -1115,14 +1162,6 @@ pub fn evaluate(
         || facts.listeners.is_err()
         || facts.installed_software.is_err()
         || facts.active_units.is_err();
-    let managed = prior.iter().any(|p| {
-        matches!(
-            p,
-            PriorOperation::Succeeded {
-                all_essential_passed: true
-            }
-        )
-    });
     let class = if managed {
         ServerClass::OssiframeManaged
     } else if incomplete {
@@ -1185,6 +1224,15 @@ pub fn evaluate(
                 v
             })
             .unwrap_or_default(),
+        candidate_versions: facts
+            .candidates
+            .as_ref()
+            .map(|m| {
+                m.iter()
+                    .filter_map(|(p, v)| v.clone().map(|v| (p.clone(), v)))
+                    .collect()
+            })
+            .unwrap_or_default(),
         conflicts: c.0,
     }
 }
@@ -1203,7 +1251,7 @@ pub async fn preflight_with(
         }
         other => OperationError::InvalidArguments(other.to_string()),
     })?;
-    let facts = collect_facts(exec, cancel, input.observed_at.clone(), &selected).await?;
+    let facts = collect_facts(exec, cancel, input.observed_at.clone()).await?;
     let report = evaluate(&facts, &selected, &input.prior_operations);
     Ok((facts, report))
 }

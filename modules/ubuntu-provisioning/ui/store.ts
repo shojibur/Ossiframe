@@ -98,9 +98,47 @@ export async function loadComponents() {
   }
 }
 
-/** The selection in effect: the user's choice, else every non-optional component. */
+export type InstallState =
+  | { kind: "unknown" }
+  | { kind: "notInstalled" }
+  | { kind: "partial"; installed: number; total: number }
+  | { kind: "problem"; status: string }
+  | { kind: "installed"; version: string; candidate: string | null };
+
+/** What the latest preflight says about one component. Information only. */
+export function installState(c: ComponentInfo, preflight: PreflightDto | null): InstallState {
+  const report = preflight?.report;
+  if (!report || c.packages.length === 0) return { kind: "unknown" };
+  const states = c.packages.map((p) => report.packages[p] ?? { state: "absent" as const });
+  const other = states.find((s) => s.state === "other");
+  if (other && other.state === "other") return { kind: "problem", status: other.status };
+  const present = states.flatMap((s) => (s.state === "installed" ? [s.version] : []));
+  if (present.length === 0) return { kind: "notInstalled" };
+  if (present.length < c.packages.length) return { kind: "partial", installed: present.length, total: c.packages.length };
+  // Every package is installed here, so `present` lines up with `c.packages`.
+  const versions = [...new Set(present)];
+  let candidate: string | null = null;
+  c.packages.forEach((p, i) => {
+    const cand = report.candidateVersions[p];
+    if (candidate === null && cand !== undefined && cand !== present[i]) candidate = cand;
+  });
+  return { kind: "installed", version: versions.length === 1 ? (versions[0] ?? "") : "mixed versions", candidate };
+}
+/** Components a preflight is run for: every non-optional one plus the user's ticks. */
+export function preflightSelection(entry: ServerEntry, list: ComponentInfo[]): string[] {
+  const ids = new Set(list.filter((c) => !c.optional).map((c) => c.id));
+  for (const id of entry.selection ?? []) ids.add(id);
+  return [...ids];
+}
+
+/**
+ * The selection in effect: the user's choice, else the non-optional components the
+ * latest preflight does not show as fully installed. Without a preflight, nothing.
+ */
 export function effectiveSelection(entry: ServerEntry, list: ComponentInfo[]): string[] {
-  return entry.selection ?? list.filter((c) => !c.optional).map((c) => c.id);
+  if (entry.selection) return entry.selection;
+  if (!entry.preflight) return [];
+  return list.filter((c) => !c.optional && installState(c, entry.preflight).kind !== "installed").map((c) => c.id);
 }
 
 export function setSelection(serverId: string, selection: string[]) {
@@ -137,7 +175,15 @@ export async function approvePlan(serverId: string): Promise<boolean> {
   update(serverId, { busy: "approve", error: null });
   try {
     const started = await provisioningApi.approvePlan(serverId, plan.dto.planId, plan.dto.digest);
-    update(serverId, { busy: null, plan: null, operationId: started.operationId, operation: null });
+    // The server is about to change, so what the last preflight showed is stale.
+    update(serverId, {
+      busy: null,
+      plan: null,
+      preflight: null,
+      selection: null,
+      operationId: started.operationId,
+      operation: null,
+    });
     await refreshOperation(started.operationId);
     void loadHistory(serverId);
     return true;

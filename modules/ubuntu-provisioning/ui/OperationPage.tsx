@@ -28,7 +28,7 @@ export function OperationPage({ serverId, connected }: { serverId: string; conne
     return (
       <div className="flex flex-col gap-3">
         {entry.error && <Notice tone="error">{errorMessage(entry.error)}</Notice>}
-        <p className="text-sm text-slate-500">{id ? "Loading operation…" : "No operation yet for this server."}</p>
+        <p className="text-sm text-slate-500">{id ? "Loading operation…" : "No operation yet. After you approve a plan, its progress appears here."}</p>
       </div>
     );
   }
@@ -67,7 +67,7 @@ export function OperationPage({ serverId, connected }: { serverId: string; conne
 
       <Section title="Steps">
         {op.steps.length === 0 ? (
-          <p className="text-sm text-slate-500">This operation has no steps. It only verifies.</p>
+          <p className="text-sm text-slate-500">No install steps. This operation only checked the components.</p>
         ) : (
           <ol className="flex flex-col gap-3">
             {op.steps.map((s) => (

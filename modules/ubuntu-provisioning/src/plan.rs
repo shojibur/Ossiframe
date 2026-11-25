@@ -8,7 +8,7 @@
 use crate::components::{self, ComponentDef};
 use ossiframe_core::{
     CommandSpec, PackageChange, PackageState, Plan, PlanError, PlanStep, PlanTarget, Preconditions,
-    PreflightReport, Resources, ServiceEffect, StepMode,
+    PreflightReport, Resources, ServerClass, ServiceEffect, StepMode,
 };
 use std::collections::BTreeMap;
 use std::time::Duration;
@@ -266,6 +266,7 @@ pub fn plan(report: &PreflightReport, selection: &[String]) -> Result<Plan, Plan
             watched_listings,
             min_mem_mb: mem_mb_min,
             min_disk_mb: disk_mb_needed,
+            server_managed: report.server_class == ServerClass::OssiframeManaged,
         },
     })
 }
@@ -273,7 +274,7 @@ pub fn plan(report: &PreflightReport, selection: &[String]) -> Result<Plan, Plan
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ossiframe_core::{Conflict, Privilege, ServerClass, Severity, SudoMode};
+    use ossiframe_core::{Conflict, Privilege, Severity, SudoMode};
 
     fn sel(ids: &[&str]) -> Vec<String> {
         ids.iter().map(|s| (*s).to_owned()).collect()
@@ -293,6 +294,7 @@ mod tests {
             total_mem_mb: Some(4000),
             free_disk_mb: Some(40_000),
             package_sources: vec!["archive.ubuntu.com".into(), "security.ubuntu.com".into()],
+            candidate_versions: BTreeMap::new(),
             sites: Vec::new(),
             conflicts: Vec::new(),
         }

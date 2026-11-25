@@ -232,6 +232,12 @@ pub struct Preconditions {
     pub watched_listings: BTreeMap<String, Vec<String>>,
     pub min_mem_mb: u32,
     pub min_disk_mb: u32,
+    /// The preflight classed the server OssiframeManaged when the plan was
+    /// made (a verified earlier Ossiframe operation). The re-check has no
+    /// access to the Store and repeats that history so listener ownership is
+    /// judged the same way. Absent in plans stored before this field: false.
+    #[serde(default)]
+    pub server_managed: bool,
 }
 
 /// What will be done, shown to the user before approval. The digest of its
@@ -320,6 +326,10 @@ pub struct PreflightReport {
     pub package_sources: Vec<String>,
     /// Sorted entries of the web server `sites-enabled` directories.
     pub sites: Vec<String>,
+    /// Installation candidate version of each component package that has one,
+    /// from the server's current APT package lists (which may be stale until
+    /// `apt-get update` runs). Information only.
+    pub candidate_versions: BTreeMap<String, String>,
     pub conflicts: Vec<Conflict>,
 }
 
@@ -404,6 +414,8 @@ pub struct ComponentInfo {
     pub title: String,
     pub description: String,
     pub requires: Vec<String>,
+    /// Packages that make up the component, for showing installed state.
+    pub packages: Vec<String>,
     pub optional: bool,
 }
 
@@ -648,6 +660,7 @@ mod tests {
             total_mem_mb: Some(2048),
             free_disk_mb: Some(10_000),
             package_sources: Vec::new(),
+            candidate_versions: BTreeMap::new(),
             sites: Vec::new(),
             conflicts,
         }
@@ -723,6 +736,7 @@ mod tests {
                 watched_listings: BTreeMap::new(),
                 min_mem_mb: 1,
                 min_disk_mb: 1,
+                server_managed: false,
             },
         }
     }

@@ -34,8 +34,8 @@ export function PlanPage({ serverId, connected }: { serverId: string; connected:
         {err && <Notice tone="error">{errorMessage(err)}</Notice>}
         {lockBusy && <StaleLock onRelease={() => setReleasing(true)} />}
         <p className="text-sm text-slate-500">
-          No plan to review. Choose components on the Software page and create a plan. Plans are kept in memory, expire after a few
-          minutes and can be approved once.
+          There is no plan to review. Choose what to add on the Software page and select Review install plan. A plan expires after a
+          few minutes and can be approved once.
         </p>
         {releasing && <ReleaseDialog serverId={serverId} onClose={() => setReleasing(false)} />}
       </div>
@@ -52,10 +52,10 @@ export function PlanPage({ serverId, connected }: { serverId: string; connected:
       {err && <Notice tone="error">{errorMessage(err)}</Notice>}
       {lockBusy && <StaleLock onRelease={() => setReleasing(true)} />}
       {expired ? (
-        <Notice tone="warn">This plan expired. Nothing was changed. Create a new plan on the Software page.</Notice>
+        <Notice tone="warn">This plan expired and nothing was changed. Create a new one on the Software page.</Notice>
       ) : (
         <Notice tone="info">
-          Nothing has been changed on the server. Expires in <span className="tabular-nums">{remaining(left)}</span>.
+          Nothing has been changed yet. This plan expires in <span className="tabular-nums">{remaining(left)}</span>.
         </Notice>
       )}
       {dto.warnings.map((w) => (
@@ -77,7 +77,7 @@ export function PlanPage({ serverId, connected }: { serverId: string; connected:
 
       <Section title={`Packages to install (${plan.packages.length})`}>
         {plan.packages.length === 0 ? (
-          <p className="text-sm text-slate-500">Nothing to install. Approving only verifies the selected components.</p>
+          <p className="text-sm text-slate-500">Nothing to install. Approving only checks that the selected components work.</p>
         ) : (
           <>
             <p className="font-mono text-[13px] break-words">{plan.packages.map((p) => p.name).join(" ")}</p>
@@ -114,14 +114,22 @@ export function PlanPage({ serverId, connected }: { serverId: string; connected:
       </Section>
 
       <Section title="Privileges and resources">
-        <Bullets items={["Package steps run as root through sudo -n.", ...plan.privileges]} />
+        {plan.privileges.length === 0 ? (
+          <p className="text-sm text-slate-500">No command runs as root.</p>
+        ) : (
+          <Bullets items={plan.privileges} />
+        )}
         <p className="text-sm">
           About {mb(plan.resources.diskMbNeeded)} of disk and at least {mb(plan.resources.memMbMin)} of memory.
         </p>
       </Section>
 
       <Section title="Limitations">
-        <Bullets items={plan.limitations} />
+        {plan.limitations.length === 0 ? (
+          <p className="text-sm text-slate-500">Nothing is installed, so there is nothing to roll back.</p>
+        ) : (
+          <Bullets items={plan.limitations} />
+        )}
       </Section>
 
       <details className="text-sm">
