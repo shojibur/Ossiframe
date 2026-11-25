@@ -1,5 +1,5 @@
 # S03 Verification (Ossiframe Doctor)
-Status: **verification recorded; S03 closes with open notes** (see "Completion criteria" and "Not verified"). Of the 13 criteria, 6 are Met and 7 are Met with note; none is wholly Pending, but the unverified parts are listed under "Not verified". Roadmap and compatibility updates (task 10.2) are separate.
+Status: **S03 closed** (2026-11-25). Of the 13 criteria, 8 are Met and 5 are Met with note. The unverified parts are listed under "Not verified". The changes from tasks 11.1 to 11.4 are local and uncommitted, so they are not yet in any published revision.
 
 ## Environment (sanitized)
 - Workstation: macOS, Apple Silicon (primary dev platform). Doctor and the generated app were unsigned local builds.
@@ -100,17 +100,18 @@ These are derived from the observed values above and the rule thresholds in `mod
 The server therefore is not expected to be finding-free. The expected findings are the pending security updates and the disabled ufw configuration. Any other finding in the real report needs to be explained rather than accepted.
 
 ## Not verified
-- Standalone_Mode (a generated app pinned to a published Ossiframe `rev`) was not re-verified in S03, because the S03 changes are not yet pushed. Generated-app reuse was verified in Local_Mode only.
-- Disconnect during a running scan, and a visible `unavailable` outcome in the UI, were not explicitly reported by the user.
-- The redaction default change (box ticked by default) in the Reports page is not UI-verified.
+- A visible `unavailable` outcome in the UI was not observed on this server (all data was readable by the non-root user). The behaviour is covered by unit tests only, not by a live observation.
 - Password authentication (S01 open check) remains unverified and disabled.
+- The changes from tasks 11.1 to 11.4 are local and uncommitted. They are not in the published revision `abc2260`, so the standalone app verified in task 11.6 does not contain them. They were verified only in the local Doctor build of 13:52 (task 11.5).
 - `shellcheck` did not run (no scripts touched; tool not installed).
-- Doctor bundle build was not re-run when this file was written.
+- The quality-gate figures were taken before tasks 11.1 to 11.4 for the table below; the later re-run is recorded under "Closing re-run (tasks 11.1 to 11.5)" with the user-reported figures only.
 - Socket count, unrecognized lines and truncation flag are not in the export, so they are inferred from the passed check.
-- Host omission in the post-fix export (the address was present, see open discrepancy 1).
 - Positive `php*-fpm` glob matching.
 - Full JSON validity of the systemd listing (only the first 300 bytes were captured).
 - Certificate discovery on the server.
+- Server-side logs were not examined.
+
+Resolved since the earlier version of this file: disconnect during a running scan (task 11.5), the redaction default (task 11.5), Standalone_Mode from a published rev (task 11.6), the `df` percentage difference and the `unitCount` definition (tasks 11.3 and 11.4, below).
 
 ## Doctor live results (task 9.3)
 Same disposable server and user as the reference. Doctor ran read-only through its typed operations. Results come from the user's reported UI checks and from the exported JSON/HTML report. The files are kept outside the repository and are not committed.
@@ -123,7 +124,7 @@ Same disposable server and user as the reference. Doctor ran read-only through i
 - Security preset.
 - Services, Network and Software tables filled.
 - Disconnect: results marked stale.
-- Not reported by the user: disconnect during a running scan, a visible `unavailable` outcome in the UI. Not verified.
+- Not reported in this first run: disconnect during a running scan (verified later, task 11.5) and a visible `unavailable` outcome (still not observed).
 ### Defects found and fixed (post-fix confirmation)
 1. `disk.low-space` raised a HIGH finding on `/boot/efi` (about 105 MB, 5% used, about 98 MiB available). The absolute 100 MiB minimum now applies only to filesystems of 1 GiB or more. The earlier expectation in this file was also wrong and is corrected above. **Confirmed fixed live:** in the export from a Doctor process started after the rebuild (rebuild 13:00:27 +08; export files written 13:04:10 and 13:04:16 +08), `/`, `/boot` and `/boot/efi` all passed, with no high finding.
 2. The network check ended `incomplete` ("socket list is truncated") because `ss` prints a link-local IPv6 address as `[addr]%iface:port` (zone after the bracket), which the parser skipped. The parser now handles that form. **Confirmed fixed live:** `net.database-exposed` passed ("No known database port listens on a non-loopback address") and `databasePortSockets` is empty. Scan coverage is assessed 12, notApplicable 1, notAssessed 0.
@@ -158,10 +159,10 @@ Memory, `df` used bytes and the update age are single observations taken at diff
 | Scan status and coverage | Separate | status `complete`, `stale` false, no missing steps. 13 results: passed 10, finding 2, notApplicable 1, incomplete 0. Coverage assessed 12, notApplicable 1, notAssessed 0 | Yes |
 | Host omitted | No address when omitted | **`server.hostRedacted` false, `server.host` present, note "The connection address is included in this report."** The box was unticked at export (default) | **No. Explained by the unticked default, see below** |
 
-### Open discrepancies
-1. **Connection address present in the 13:04 export (explained, not a redaction failure).** `ReportsPage.tsx` initialised `useState(false)`, so after a relaunch or tab switch the "Omit connection address" box started unticked. Export is blocked unless the preview's frozen redaction equals the toggle, and the preview label states whether the address is included, so the 13:04 export with `hostRedacted` false reflects an unticked box. Redaction was exercised by the earlier export at 12:52:59Z (`hostRedacted` true, connection address absent from the JSON and HTML). The redaction code is unchanged since. **Default changed after the live run:** the default is now `useState(true)` (privacy-preserving). This change is not live-verified in the UI. It is covered only by `pnpm -r typecheck`, `pnpm -r lint` and a successful `pnpm --filter @ossiframe/doctor tauri build`. The 13:04 export files still contain the connection address and must not be shared.
-2. **Disk percentage method.** Doctor uses used / (used + available), rounded down, so it shows 13% / 13% / 5% against `df` 14% / 14% / 6%. Documented in the check limitation. A difference in method, not a defect.
-3. **`unitCount` definition.** 278 matches neither the 177 listed units nor the 241 unit files. It is consistent with a merge of both lists by unit name (between 241 and 418), but the intended definition is not confirmed against the module.
+### Discrepancies (all resolved)
+1. **Connection address present in the 13:04 export (explained, then fixed and verified).** `ReportsPage.tsx` initialised `useState(false)`, so the "Omit connection address" box started unticked, and the 13:04 export carried the address. Export is blocked unless the preview's frozen redaction equals the toggle. Redaction itself was exercised by the earlier 12:52:59Z export (`hostRedacted` true, address absent from JSON and HTML). The default is now `useState(true)`. **Verified by the user in the 13:52 build (task 11.5):** the box starts ticked. The 13:04 export files still contain the connection address and must not be shared.
+2. **Disk percentage method (resolved by task 11.3).** Doctor showed 13% / 13% / 5% against `df` 14% / 14% / 6% because it rounded down used / (used + available). It now uses ceil(used * 100 / (used + avail)), shared by display, report and thresholds, which is how `df` computes it. **Verified by the user in the 13:52 build:** Overview shows about 14% for `/` and about 6% for `/boot/efi`, matching `df`. The percentages quoted in the comparison table above are from the earlier export and are kept as recorded.
+3. **`unitCount` definition (resolved by task 11.4).** The 278 figure is the merge of loaded and installed units by name. The Services label now reads "Units (loaded ∪ installed)". **Verified by the user in the 13:52 build:** the label is shown. The number 278 was not re-checked against the server in this step.
 
 ### Export checks (post-fix JSON and HTML)
 - Only IPv4 text in either file is the connection address (discrepancy 1). No other address. The private address appears only inside the cloud default hostname `ip-<private-ip>`, so the report carries address information even with the address omitted. The note warns about hostnames; the user should review before sharing.
@@ -194,21 +195,68 @@ The user ran the generated "Ossi Audit" app (Local_Mode, `--modules linux-audit`
 |---|---|---|
 | `disk.low-space` raised a HIGH finding on the 105 MB `/boot/efi` partition (absolute 100 MiB minimum) | Absolute minimum now applies only to filesystems of 1 GiB or more | Confirmed live in a post-fix export |
 | `ss` output `[addr]%zone:port` (zone after the bracket) was not parsed, so the network check ended `incomplete` | Socket parser handles that form | Confirmed live: `net.database-exposed` passed (socket count inferred, not in the export) |
-| Report redaction box started unticked, so an export carried the connection address | Default changed to ticked (`useState(true)`) | Not UI-verified; typecheck, lint and bundle build only |
+| Report redaction box started unticked, so an export carried the connection address | Default changed to ticked (`useState(true)`) | User-confirmed in the 13:52 build (11.5) |
+| Discarded systemd records were not tracked, so `svc.failed` could pass on partial data | `unrecognizedRecords` tracked; `svc.failed` is incomplete when above 0 (11.1) | Unit tests; not live-observed |
+| update-notifier cache age was taken from the stamp, an unparseable security line was not an error, and an absent security line was unhandled | Cache mtime read independently and drives freshness; unparseable security line is an error; absent security line is inferred 0 with a limitation (11.2). Checked against the update-notifier `apt_check.py` source, which writes the security line only when the count is above 0 | Unit tests; not re-run against the server |
+| Disk percentage differed from `df` | ceil(used * 100 / (used + avail)), shared by display, report and thresholds (11.3) | User-confirmed against `df` (11.5) |
+| Merged unit count was unlabelled | Label "Units (loaded ∪ installed)" (11.4) | User-confirmed (11.5) |
 
 ## Completion criteria (Requirement 18)
 | # | Criterion | Status | Evidence and note |
 |---|---|---|---|
 | 1 | Doctor is an independently useful diagnostics app | Met | Seven pages, scan, findings, export, run live against a real server (task 9.3) |
 | 2 | Connects to actual authorized Linux infrastructure | Met | Disposable Lightsail server, fingerprint confirmed in the console (9.1), read-only run (9.2, 9.3) |
-| 3 | Existing connection management remains functional | Met with note | Connect after trust, and disconnect (results marked stale) worked in Doctor; connect worked in the generated app. Password auth is unverified and disabled |
+| 3 | Existing connection management remains functional | Met with note | Connect after trust and disconnect (results marked stale) worked in Doctor; connect worked in both generated apps. Password auth is unverified and disabled |
 | 4 | Reusable modules provide actual discovery data | Met | Memory, swap, filesystems, services, sockets and packages matched the OpenSSH reference (comparison table) |
-| 5 | Checks give meaningful, evidence-based results | Met with note | Expected outcomes matched the real report. Open: df percentage method differs from `df`; `unitCount` 278 definition unconfirmed |
+| 5 | Checks give meaningful, evidence-based results | Met | Expected outcomes matched the real report. Disk percentage now matches `df` and the unit count label is explicit (11.3, 11.4; user-confirmed in the 13:52 build) |
 | 6 | Findings show severity and verification limits | Met | Severity and limitation text present in the export (ufw, updates, ssh) |
-| 7 | Services, network and software available in the app | Met with note | Tables filled (user-confirmed). Socket count not in the export; `unitCount` unconfirmed |
-| 8 | Progress, cancellation and partial results | Met with note | Progress, cancel with "Incomplete" label and kept partial results confirmed. Disconnect during a scan and a visible `unavailable` outcome not reported |
+| 7 | Services, network and software available in the app | Met | Tables filled (user-confirmed). Services label "Units (loaded ∪ installed)" confirmed. Socket count is not in the export (inferred only) |
+| 8 | Progress, cancellation and partial results | Met with note | Progress, cancel with "Incomplete" label and kept partial results confirmed. Disconnect at about step 3 ended the scan Incomplete with completed steps kept and a stale notice (user-confirmed, 11.5). A visible `unavailable` outcome in the UI was not observed |
 | 9 | JSON export works | Met | JSON and HTML exported, schema version 1, no scripts, no key material, redaction exercised (earlier export) |
 | 10 | No unauthorized server mutations | Met with note | Only predefined read-only commands, no sudo, no mutating IPC; server unchanged as far as reported. Server-side logs were not examined |
-| 11 | Modules reusable outside Doctor | Met with note | Generated app built and ran 3 steps via `runOperation` in Local_Mode. Standalone_Mode with a published rev not re-verified |
-| 12 | Production builds and quality checks pass | Met with note | See quality gates. `shellcheck` not run (nothing to check); 3 `cargo audit` warnings; bundle not re-run today |
+| 11 | Modules reusable outside Doctor | Met with note | Standalone_Mode verified from published rev `abc2260` (11.6): build and tests passed, git-sourced `Cargo.lock`, no local paths, live audit operations returned results. Local_Mode also verified (9.4). Note: 11.1 to 11.4 are not in `abc2260` |
+| 12 | Production builds and quality checks pass | Met with note | See quality gates and the closing re-run. `shellcheck` not run (nothing to check); 3 `cargo audit` warnings |
 | 13 | Real-server verification recorded honestly | Met | This file: user-reported items marked as such, unverified items listed |
+
+## Standalone mode from published rev abc2260 (task 11.6)
+
+Standalone_Mode build, generated from a clean detached checkout of `abc2260a0c2ff7c4c81b1161fd8bb8d213546692` (on origin/main) with `--modules linux-audit` and no `--rev`, so the generator pinned that HEAD. The temporary checkout was removed afterwards. No commits, no server contact during this step.
+
+| Check | Result |
+| --- | --- |
+| Pinned rev printed by generator | `abc2260a0c2ff7c4c81b1161fd8bb8d213546692` |
+| `linux-inventory` added automatically | Yes. `src-tauri/Cargo.toml` has both module dependencies and `lib.rs` registers both. |
+| `src-tauri/Cargo.lock` sources | `ossiframe-core`, `-desktop`, `-ssh`, `-mod-linux-inventory`, `-mod-linux-audit` are all `git+https://github.com/shojibur/Ossiframe?rev=abc2260a…#abc2260a…` |
+| Local paths in generated project (excluding `node_modules`, `target`) | None (`grep` for the monorepo path and the temporary checkout path found nothing) |
+| App-defined page | Same `src/pages/AuditCheck.tsx` as task 9.4, registered in `src/modules.ts`, generated app only |
+| `pnpm install`, `pnpm typecheck`, `pnpm lint` | Pass |
+| `pnpm tauri build` (full bundle) | Pass. Dependencies fetched from the public git repository. `.app` 16.85 MiB, `.dmg` 5.62 MiB, unsigned. |
+| `cargo test` in `src-tauri` | 2 passed, 0 failed |
+
+Bundle: `<home>/ossiframe-s03-public/app/src-tauri/target/release/bundle/macos/Ossi Public Audit.app`
+
+### Live run (user-reported)
+The user ran "Ossi Public Audit" against the Lightsail server. The app connected after the user trusted the host fingerprint, and the audit operations returned real check results. The user reported "Worked". No output, counts or screenshots were supplied, and none are recorded here. Nothing was run from this assistant session against the server.
+
+### Limits of this evidence
+The 11.1 to 11.4 changes (discarded service records, update-notifier cache age, `df`-aligned disk percentage, merged unit count label) are local and uncommitted. They are not in `abc2260`, so this app uses the crates and modules as published at that revision.
+Because of that, the standalone result confirms module reuse from a published revision. It does not confirm the 11.1 to 11.4 behaviour. Those changes need to be committed and pushed, and a new standalone build verified, before they can be called published.
+
+## Closing re-run (tasks 11.1 to 11.5)
+Date: 2026-11-25. Local, uncommitted changes.
+
+| Check | Result |
+|---|---|
+| `cargo fmt` | Clean (as reported) |
+| `cargo clippy` | Clean (as reported) |
+| `cargo test --workspace` | 0 failures (as reported; per-crate counts not recorded here, so the 240-test figure in the quality-gates table is not updated) |
+| `pnpm typecheck`, `pnpm lint` | Pass |
+| Doctor bundle rebuild | Rebuilt at 13:52 |
+
+### User-confirmed in the 13:52 build (task 11.5)
+- "Omit connection address" starts ticked.
+- Disconnect at about step 3 of a running scan: the scan ends Incomplete, completed steps are kept, a stale notice is shown.
+- Overview disk percentage matches `df` (`/` about 14%, `/boot/efi` about 6%).
+- Services shows the label "Units (loaded ∪ installed)".
+
+These are the user's reports. No screenshots or exports were supplied.

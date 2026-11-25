@@ -12,9 +12,9 @@ pub const MEM_MEDIUM_BELOW_PERCENT: u128 = 10;
 /// Memory: available below this share of total is `high`.
 pub const MEM_HIGH_BELOW_PERCENT: u128 = 5;
 /// Disk: used share at or above these values gives the severity.
-pub const DISK_MEDIUM_PERCENT: u128 = 80;
-pub const DISK_HIGH_PERCENT: u128 = 90;
-pub const DISK_CRITICAL_PERCENT: u128 = 95;
+pub const DISK_MEDIUM_PERCENT: u64 = 80;
+pub const DISK_HIGH_PERCENT: u64 = 90;
+pub const DISK_CRITICAL_PERCENT: u64 = 95;
 /// Disk: less available space than this is `high`.
 pub const DISK_MIN_AVAILABLE_BYTES: u64 = 100 * 1024 * 1024;
 /// Disk: the absolute available-space rule applies only to filesystems with
@@ -134,9 +134,8 @@ pub fn disk_low_space(info: &ServerInfo, observed_at: &str) -> Vec<CheckResult> 
         .filesystems
         .iter()
         .map(|fs| {
-            let denom = fs.used_bytes.saturating_add(fs.available_bytes);
             let title = "Disk space";
-            if denom == 0 {
+            let Some(used_pct) = fs.used_percent() else {
                 return CheckResult::new(
                     "disk.low-space",
                     Category::Resources,
@@ -146,13 +145,12 @@ pub fn disk_low_space(info: &ServerInfo, observed_at: &str) -> Vec<CheckResult> 
                     observed_at,
                 )
                 .resource(&fs.mount);
-            }
-            let (u, d) = (u128::from(fs.used_bytes), u128::from(denom));
-            let by_use = if u * 100 >= d * DISK_CRITICAL_PERCENT {
+            };
+            let by_use = if used_pct >= DISK_CRITICAL_PERCENT {
                 Some(Severity::Critical)
-            } else if u * 100 >= d * DISK_HIGH_PERCENT {
+            } else if used_pct >= DISK_HIGH_PERCENT {
                 Some(Severity::High)
-            } else if u * 100 >= d * DISK_MEDIUM_PERCENT {
+            } else if used_pct >= DISK_MEDIUM_PERCENT {
                 Some(Severity::Medium)
             } else {
                 None
@@ -166,7 +164,6 @@ pub fn disk_low_space(info: &ServerInfo, observed_at: &str) -> Vec<CheckResult> 
                 .into_iter()
                 .flatten()
                 .max_by_key(|s| rank(*s));
-            let used_pct = pct_floor(fs.used_bytes, denom);
             let evidence = format!(
                 "{} used {used_pct}%, {} MiB available",
                 fs.mount,
@@ -198,7 +195,7 @@ pub fn disk_low_space(info: &ServerInfo, observed_at: &str) -> Vec<CheckResult> 
             check
                 .resource(&fs.mount)
                 .evidence([evidence])
-                .limitation("Used share is used / (used + available), as df reports it.")
+                .limitation("Used percentage is ceil(used * 100 / (used + available)), following df rounding. It is rounded up, so it can read 1 point higher than the exact share; thresholds use this same value.")
         })
         .collect();
     if info.filesystems_truncated {
@@ -264,17 +261,32 @@ pub fn svc_failed(info: &ServicesInfo, observed_at: &str) -> Vec<CheckResult> {
             ));
         }
     }
-    if info.truncated {
+    if info.truncated || info.unrecognized_records > 0 {
+        let (summary, limitation) = if info.truncated {
+            (
+                "The service list is truncated, so units that were not listed may have failed."
+                    .to_owned(),
+                "Only part of the service list was read.".to_owned(),
+            )
+        } else {
+            (
+                format!(
+                    "{} service record(s) were not recognized, so those units were not assessed.",
+                    info.unrecognized_records
+                ),
+                "Some service records could not be read.".to_owned(),
+            )
+        };
         out.push(
             CheckResult::new(
                 "svc.failed",
                 Category::Services,
                 Outcome::Incomplete,
                 title,
-                "The service list is truncated, so units that were not listed may have failed.",
+                summary,
                 observed_at,
             )
-            .limitation("Only part of the service list was read."),
+            .limitation(limitation),
         );
     } else if failed.is_empty() {
         out.push(CheckResult::new(
@@ -714,6 +726,32 @@ mod tests {
     }
 
     #[test]
+    fn disk_percent_rounds_up_like_df() {
+        let d = |used: u64, avail: u64| DiskInfo {
+            mount: "/".to_owned(),
+            total_bytes: used + avail,
+            used_bytes: used,
+            available_bytes: avail,
+        };
+        assert_eq!(d(0, 0).used_percent(), None);
+        assert_eq!(d(0, 5).used_percent(), Some(0));
+        assert_eq!(d(1, 0).used_percent(), Some(100));
+        // Reference server (Ubuntu 24.04): df showed 14%, 14%, 6%.
+        assert_eq!(d(2_667_438_080, 16_998_342_656).used_percent(), Some(14));
+        assert_eq!(d(119_083_008, 739_430_400).used_percent(), Some(14));
+        assert_eq!(d(6_399_488, 102_995_968).used_percent(), Some(6));
+        // 79.01% used shows as 80% and is medium; exactly 79% stays 79.
+        let r = |used: u64| disk_low_space(&disk(used, 10_000 - used), AT).remove(0);
+        assert_eq!(r(7_901).evidence, ["/ used 80%, 0 MiB available"]);
+        assert_eq!(sev(&r(7_901)), Some(Severity::Medium));
+        assert_eq!(r(7_900).outcome, Outcome::Passed);
+        assert_eq!(sev(&r(8_901)), Some(Severity::High));
+        assert_eq!(sev(&r(9_400)), Some(Severity::High));
+        assert_eq!(sev(&r(9_401)), Some(Severity::Critical));
+        assert_eq!(sev(&r(8_900)), Some(Severity::Medium));
+    }
+
+    #[test]
     fn disk_low_available_is_high_and_highest_wins() {
         let min = DISK_MIN_AVAILABLE_BYTES;
         let mib = 1024 * 1024;
@@ -811,6 +849,15 @@ mod tests {
         assert_eq!(both[1].outcome, Outcome::Incomplete);
     }
 
+    #[test]
+    fn discarded_service_records_make_the_check_incomplete() {
+        let mut info = svcs(vec![svc("a.service", "active")], false);
+        info.unrecognized_records = 2;
+        let out = svc_failed(&info, AT);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].outcome, Outcome::Incomplete);
+        assert!(out[0].explanation.contains("2 service record(s)"));
+    }
     #[test]
     fn failed_findings_are_capped_with_a_limitation() {
         let list = (0..25)

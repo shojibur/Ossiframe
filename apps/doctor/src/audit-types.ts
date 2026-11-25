@@ -45,7 +45,9 @@ export interface ResourcesEvidence {
 export interface ServicesEvidence {
   available: boolean;
   truncated: boolean;
-  unitCount: number;
+  unrecognizedRecords: number;
+  /** Distinct units: loaded ∪ installed (unit files). */
+  unitsLoadedOrInstalled: number;
   failedCount: number;
   services: Service[];
   limitations: string[];
@@ -91,7 +93,10 @@ export interface FirewallEvidence {
 export interface UpdatesEvidence {
   pendingUpdates: number | null;
   pendingSecurity: number | null;
+  /** Age of the apt update-success-stamp. */
   metadataAgeSeconds: number | null;
+  /** Age of the update-notifier `updates-available` file (its own mtime). */
+  cacheAgeSeconds: number | null;
   rebootRequired: boolean | null;
   source: string;
 }

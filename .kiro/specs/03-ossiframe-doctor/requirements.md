@@ -69,7 +69,7 @@ S03 turns the existing Doctor shell (`apps/doctor`) into a read-only diagnostics
 3. IF systemd output is unparsable, THEN THE Inventory_Module SHALL return an `unavailable` result and not a guessed list.
 4. THE Inventory_Module SHALL return at most 500 services, SHALL set `truncated` and SHALL add a limitation string WHEN the list is truncated.
 5. WHERE a state is not reported by systemd for a unit (for example a unit file that is not loaded has no active state), THE Inventory_Module SHALL return `unknown` for that state and SHALL NOT infer it.
-6. THE Doctor Services page SHALL distinguish installed, loaded, active, inactive, failed, enabled, disabled and unknown, and SHALL NOT present inactive or disabled units as problems.
+6. THE Doctor SHALL label the merged service count as "units (loaded ∪ installed)". THE Doctor Services page SHALL distinguish installed, loaded, active, inactive, failed, enabled, disabled and unknown, and SHALL NOT present inactive or disabled units as problems.
 
 ### Requirement 4: Listening socket discovery
 
@@ -132,7 +132,7 @@ S03 turns the existing Doctor shell (`apps/doctor`) into a read-only diagnostics
 #### Acceptance Criteria
 
 1. WHEN `MemAvailable` is below 10% of total memory, THE Audit_Module SHALL return `mem.low-available` as a `medium` finding, and as a `high` finding WHEN below 5%. THE result SHALL state that it is a single snapshot and not evidence of sustained memory exhaustion.
-2. WHEN a filesystem is at least 80% used, THE Audit_Module SHALL return `disk.low-space` as `medium`, at least 90% as `high`, and at least 95% as `critical`. WHEN a filesystem of at least 1 GiB total size has less than 100 MiB available, THE Audit_Module SHALL treat that as `high`; smaller filesystems are assessed by percentage only. THE Audit_Module SHALL return one result per filesystem with the highest applicable severity.
+2. WHEN a filesystem is at least 80% used, THE Audit_Module SHALL return `disk.low-space` as `medium`, at least 90% as `high`, and at least 95% as `critical`. WHEN a filesystem of at least 1 GiB total size has less than 100 MiB available, THE Audit_Module SHALL treat that as `high`; smaller filesystems are assessed by percentage only. THE Audit_Module SHALL return one result per filesystem with the highest applicable severity. The used percentage is computed as `df` does, `ceil(used*100/(used+avail))`, and the same value SHALL be displayed and used for the thresholds.
 3. THE Audit_Module SHALL assess only the meaningful filesystems returned by the Inventory_Module and SHALL add a limitation WHEN the filesystem list was truncated, returning `incomplete` and not `passed` for the disk rule in that case unless a finding exists.
 4. WHEN a service unit has active state `failed`, THE Audit_Module SHALL return `svc.failed` as a `medium` finding for that unit, up to 20 findings, then add a limitation. Inactive, disabled and `unknown` units SHALL NOT produce a finding.
 5. WHEN the service list is complete and no unit has active state `failed`, THE Audit_Module SHALL return one `svc.failed` result with Outcome `passed`. WHEN the service list is truncated and no failed unit was seen, THE Audit_Module SHALL return `incomplete`.

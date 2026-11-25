@@ -121,6 +121,7 @@ export interface ServicesInfo {
   available: boolean;
   services: Service[];
   truncated: boolean;
+  unrecognizedRecords: number;
   limitations: string[];
   probeErrors: ProbeError[];
 }

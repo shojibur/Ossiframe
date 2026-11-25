@@ -174,7 +174,7 @@ export function ServicesPage({ serverId, connected }: { serverId: string; connec
     <div className="flex flex-col gap-4">
       <Banners entry={src.entry} result={src.result} truncated={ev.truncated} limitations={ev.limitations ?? []} />
       <div className="flex flex-wrap items-center gap-2">
-        <Chip label="Listed" value={list.length} />
+        <Chip label="Units (loaded ∪ installed)" value={list.length} />
         <Chip label="Installed" value={list.filter((s) => s.installed).length} />
         <Chip label="Loaded" value={list.filter((s) => s.load === "loaded").length} />
         <Chip label="Active" value={count("active")} />

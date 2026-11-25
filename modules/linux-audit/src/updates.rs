@@ -21,7 +21,12 @@ const CACHED: &str = "Based on cached update-notifier and apt metadata, not live
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Pending {
     pub total: u32,
-    pub security: u32,
+    /// Standard security updates. The parser sets `Some` for every recognized
+    /// file; `None` is only constructed by callers that do not know the count.
+    pub security: Option<u32>,
+    /// True when `security` is `Some(0)` because the security line was absent
+    /// while updates are pending, not because the file said zero.
+    pub security_inferred: bool,
     /// Extra security updates only available through ESM, if reported. Not
     /// included in `total` or `security`.
     pub esm_security: Option<u32>,
@@ -34,6 +39,8 @@ pub struct Collected {
     pub pending: Result<Pending, ProbeFailure>,
     /// Age of the apt success stamp in seconds.
     pub age: Result<u64, ProbeFailure>,
+    /// Age of the `updates-available` file itself (its own mtime), in seconds.
+    pub cache_age: Result<u64, ProbeFailure>,
     /// Modification time of the reboot marker. `Missing` means no marker.
     pub reboot: Result<u64, ProbeFailure>,
 }
@@ -45,8 +52,18 @@ fn count(token: &str) -> Option<u32> {
 /// Parses the localized English motd text written by update-notifier, for
 /// example `3 updates can be applied immediately.` and
 /// `1 of these updates is a standard security update.` Unrecognized text is
-/// an error, never a pass. Absence of the security line means 0 security
-/// updates.
+/// an error, never a pass.
+///
+/// Source: update-notifier `data/apt_check.py`, function
+/// `write_human_readable_summary`
+/// (https://git.launchpad.net/update-notifier/tree/data/apt_check.py). It
+/// always writes the "N updates can be applied immediately." line, and writes
+/// the "standard security update(s)" line only inside `if security_updates > 0`.
+/// So with a recognized total line, an absent security line means zero
+/// standard security updates, and this parser infers `Some(0)` and flags it
+/// with `security_inferred`. A security line that exists but cannot be read
+/// is still an error. ESM security updates are counted separately by the
+/// source and are not part of this count.
 pub fn parse_pending(text: &str) -> Result<Pending, &'static str> {
     let mut total = None;
     let mut security = None;
@@ -55,7 +72,13 @@ pub fn parse_pending(text: &str) -> Result<Pending, &'static str> {
     for raw in text.lines().take(100) {
         let lower = raw.trim().trim_end_matches('.').to_ascii_lowercase();
         let words: Vec<&str> = lower.split_whitespace().collect();
-        let Some(n) = words.first().and_then(|w| count(w)) else {
+        let n = words.first().and_then(|w| count(w));
+        // A security count line whose number cannot be read must not leave the
+        // count defaulting to zero.
+        if lower.contains("of these update") && lower.contains("security") && n.is_none() {
+            return Err("the security update count line was not recognized");
+        }
+        let Some(n) = n else {
             continue;
         };
         let is_total = words
@@ -81,13 +104,16 @@ pub fn parse_pending(text: &str) -> Result<Pending, &'static str> {
     let Some(total) = total else {
         return Err("the update count line was not recognized");
     };
-    let security = security.unwrap_or(0);
-    if security > total {
+    // See the source note above: no security line means zero.
+    let security_inferred = security.is_none() && total > 0;
+    let security = security.or(Some(0));
+    if security.is_some_and(|s| s > total) {
         return Err("the security update count is larger than the total");
     }
     Ok(Pending {
         total,
         security,
+        security_inferred,
         esm_security: esm,
         lines,
     })
@@ -110,22 +136,33 @@ pub async fn collect(exec: &dyn Executor, cancel: &CancelToken) -> Result<Collec
     let pending = run_probe(exec, cancel, "cat", &[UPDATES_AVAILABLE])
         .await?
         .and_then(|t| parse_pending(&t).map_err(|m| ProbeFailure::Error(m.to_owned())));
+    let cache_mtime = run_probe(exec, cancel, "stat", &["-c", "%Y", UPDATES_AVAILABLE])
+        .await?
+        .and_then(|t| parse_epoch(&t));
     let stamp = run_probe(exec, cancel, "stat", &["-c", "%Y", UPDATE_STAMP])
         .await?
         .and_then(|t| parse_epoch(&t));
-    let age = match stamp {
-        Ok(stamp) => run_probe(exec, cancel, "date", &["-u", "+%s"])
+    // The server clock is read once, and only when an age can be computed.
+    let now = if cache_mtime.is_ok() || stamp.is_ok() {
+        run_probe(exec, cancel, "date", &["-u", "+%s"])
             .await?
             .and_then(|t| parse_epoch(&t))
-            .and_then(|now| age_secs(now, stamp)),
-        Err(e) => Err(e),
+    } else {
+        Err(ProbeFailure::Error("server clock not read".to_owned()))
     };
+    let age_of = |mtime: Result<u64, ProbeFailure>| {
+        let m = mtime?;
+        age_secs(now.clone()?, m)
+    };
+    let cache_age = age_of(cache_mtime);
+    let age = age_of(stamp);
     let reboot = run_probe(exec, cancel, "stat", &["-c", "%Y", REBOOT_REQUIRED])
         .await?
         .and_then(|t| parse_epoch(&t));
     Ok(Collected {
         pending,
         age,
+        cache_age,
         reboot,
     })
 }
@@ -140,25 +177,38 @@ pub fn format_age(secs: u64) -> String {
     }
 }
 
-fn age_note(age: &Result<u64, ProbeFailure>) -> String {
-    match age {
+fn age_note(
+    cache_age: &Result<u64, ProbeFailure>,
+    stamp_age: &Result<u64, ProbeFailure>,
+) -> String {
+    let cache = match cache_age {
         Ok(a) => format!(
-            "Cache age: apt metadata last refreshed {} ago.",
+            "Cache age: the update-notifier file was last written {} ago.",
             format_age(*a)
         ),
         Err(_) => "Cache age is unknown.".to_owned(),
-    }
+    };
+    let stamp = match stamp_age {
+        Ok(a) => format!(
+            " Apt metadata was last refreshed {} ago (reported separately).",
+            format_age(*a)
+        ),
+        Err(_) => String::new(),
+    };
+    cache + &stamp
 }
 
 /// `upd.security-pending`.
 pub fn security_pending(
     pending: &Result<Pending, ProbeFailure>,
-    age: &Result<u64, ProbeFailure>,
+    cache_age: &Result<u64, ProbeFailure>,
+    stamp_age: &Result<u64, ProbeFailure>,
     observed_at: &str,
 ) -> CheckResult {
     let title = "Pending security updates";
     let rule = "upd.security-pending";
-    let stale = match age {
+    // Freshness is judged on the age of the update-notifier file itself.
+    let stale = match cache_age {
         Ok(a) => *a > STALE_AFTER_SECS,
         Err(_) => true,
     };
@@ -169,19 +219,32 @@ pub fn security_pending(
                 .into_check(rule, Category::Updates, title, false, observed_at)
                 .resource(UPDATES_AVAILABLE)
                 .limitation(CACHED)
-                .limitation(age_note(age));
+                .limitation(age_note(cache_age, stamp_age));
         }
     };
-    let mut c = if p.security > 0 {
+    let mut c = if let Some(n) = p.security.filter(|n| *n > 0) {
         CheckResult::finding(
             rule,
             Category::Updates,
             Severity::Medium,
             title,
-            format!("{} security update(s) are reported as pending.", p.security),
+            format!("{n} security update(s) are reported as pending."),
             observed_at,
         )
         .recommendation("Install pending security updates with apt, then reboot if required.")
+    } else if p.security.is_none() {
+        CheckResult::new(
+            rule,
+            Category::Updates,
+            Outcome::Incomplete,
+            title,
+            format!(
+                "Not fully assessed: {} update(s) are reported as pending, but the cached data \
+                 has no security update count, so security updates may be among them.",
+                p.total
+            ),
+            observed_at,
+        )
     } else if p.total > 0 {
         CheckResult::finding(
             rule,
@@ -201,7 +264,7 @@ pub fn security_pending(
             Outcome::Incomplete,
             title,
             "Not fully assessed: the cached data reports no pending updates, but the apt \
-             metadata is stale or its age is unknown, so pending updates may be missed.",
+             cache is stale or its age is unknown, so pending updates may be missed.",
             observed_at,
         )
     } else {
@@ -218,10 +281,16 @@ pub fn security_pending(
         .resource(UPDATES_AVAILABLE)
         .evidence(&p.lines)
         .limitation(CACHED)
-        .limitation(age_note(age));
+        .limitation(age_note(cache_age, stamp_age));
     if stale && p.total > 0 {
         c = c.limitation(
             "The cached metadata is stale or its age is unknown; counts may be outdated.",
+        );
+    }
+    if p.security_inferred {
+        c = c.limitation(
+            "update-notifier omits the security line when there are no security updates; \
+             inferred zero.",
         );
     }
     if let Some(n) = p.esm_security {
@@ -236,8 +305,8 @@ pub fn security_pending(
 pub fn metadata_stale(age: &Result<u64, ProbeFailure>, observed_at: &str) -> CheckResult {
     let title = "Apt metadata age";
     let rule = "upd.metadata-stale";
-    let note = "update-success-stamp records the last successful apt update; the pending \
-                update file is only as fresh as this stamp.";
+    let note = "update-success-stamp records the last successful apt update. The age of the \
+                pending update file is read separately from its own modification time.";
     let c = match age {
         Err(f) => f
             .into_check(rule, Category::Updates, title, false, observed_at)
@@ -325,10 +394,29 @@ mod tests {
     fn p(total: u32, security: u32) -> Result<Pending, ProbeFailure> {
         Ok(Pending {
             total,
-            security,
+            security: Some(security),
+            security_inferred: false,
             esm_security: None,
             lines: vec!["x".to_owned()],
         })
+    }
+
+    /// Updates pending, security count line absent.
+    fn p_unknown(total: u32) -> Result<Pending, ProbeFailure> {
+        Ok(Pending {
+            total,
+            security: None,
+            security_inferred: false,
+            esm_security: None,
+            lines: vec!["x".to_owned()],
+        })
+    }
+
+    fn sp(
+        pending: &Result<Pending, ProbeFailure>,
+        cache_age: &Result<u64, ProbeFailure>,
+    ) -> CheckResult {
+        security_pending(pending, cache_age, &Ok(DAY), AT)
     }
 
     #[test]
@@ -336,18 +424,29 @@ mod tests {
         let t = " \n3 updates can be applied immediately.\n1 of these updates is a standard \
                  security update.\nTo see these additional updates run: apt list --upgradable\n";
         let r = parse_pending(t).unwrap();
-        assert_eq!((r.total, r.security, r.esm_security), (3, 1, None));
+        assert_eq!((r.total, r.security, r.esm_security), (3, Some(1), None));
         assert_eq!(r.lines.len(), 2);
+        assert!(!r.security_inferred);
+        // update-notifier omits the security line when the count is zero.
         let r = parse_pending("1 update can be applied immediately.").unwrap();
-        assert_eq!((r.total, r.security), (1, 0));
+        assert_eq!(
+            (r.total, r.security, r.security_inferred),
+            (1, Some(0), true)
+        );
         let r = parse_pending("0 updates can be applied immediately.\n").unwrap();
-        assert_eq!(r.total, 0);
+        assert_eq!(
+            (r.total, r.security, r.security_inferred),
+            (0, Some(0), false)
+        );
         let r = parse_pending(
             "10 updates can be applied immediately.\n4 of these updates are standard security \
              updates.\n2 additional security updates can be applied with ESM Apps.\n",
         )
         .unwrap();
-        assert_eq!((r.total, r.security, r.esm_security), (10, 4, Some(2)));
+        assert_eq!(
+            (r.total, r.security, r.esm_security),
+            (10, Some(4), Some(2))
+        );
     }
 
     #[test]
@@ -360,6 +459,7 @@ mod tests {
             "-1 updates can be applied immediately.",
             "99999999999 updates can be applied immediately.",
             "2 of these updates are standard security updates.",
+            "3 updates can be applied immediately.\nmany of these updates are security updates.",
             "1 updates can be applied immediately.\n5 of these updates are standard security updates.",
         ] {
             assert!(parse_pending(t).is_err(), "{t:?}");
@@ -392,17 +492,17 @@ mod tests {
     #[test]
     fn security_pending_severities() {
         let fresh = Ok(DAY);
-        let c = security_pending(&p(3, 1), &fresh, AT);
+        let c = sp(&p(3, 1), &fresh);
         assert_eq!(
             (c.outcome, c.severity),
             (Outcome::Finding, Some(Severity::Medium))
         );
-        let c = security_pending(&p(3, 0), &fresh, AT);
+        let c = sp(&p(3, 0), &fresh);
         assert_eq!(
             (c.outcome, c.severity),
             (Outcome::Finding, Some(Severity::Info))
         );
-        let c = security_pending(&p(0, 0), &fresh, AT);
+        let c = sp(&p(0, 0), &fresh);
         assert_eq!(c.outcome, Outcome::Passed);
         assert!(!c.explanation.to_lowercase().contains("patched"));
     }
@@ -414,7 +514,7 @@ mod tests {
             Err(ProbeFailure::Missing),
             Err(ProbeFailure::Error("x".into())),
         ] {
-            let c = security_pending(&p(0, 0), &age, AT);
+            let c = sp(&p(0, 0), &age);
             assert_eq!(c.outcome, Outcome::Incomplete);
             assert!(
                 c.limitations
@@ -423,17 +523,115 @@ mod tests {
             );
         }
         // Findings are kept, with a stale-data limitation.
-        let c = security_pending(&p(2, 1), &Ok(8 * DAY), AT);
+        let c = sp(&p(2, 1), &Ok(8 * DAY));
         assert_eq!(c.outcome, Outcome::Finding);
         assert!(c.limitations.iter().any(|l| l.contains("stale")));
     }
 
     #[test]
+    fn freshness_uses_the_cache_age_not_the_apt_stamp_age() {
+        // Fresh apt stamp, stale cache file: still incomplete.
+        let c = security_pending(&p(0, 0), &Ok(8 * DAY), &Ok(60), AT);
+        assert_eq!(c.outcome, Outcome::Incomplete);
+        // Stale apt stamp, fresh cache file: judged fresh, both ages reported.
+        let c = security_pending(&p(0, 0), &Ok(60), &Ok(30 * DAY), AT);
+        assert_eq!(c.outcome, Outcome::Passed);
+        let notes = c.limitations.join(" ");
+        assert!(
+            notes.contains("30 days") && notes.contains("minutes"),
+            "{notes}"
+        );
+    }
+
+    #[test]
+    fn missing_security_line_is_inferred_zero_with_limitation() {
+        let pending = parse_pending("3 updates can be applied immediately.\n")
+            .map_err(|m| ProbeFailure::Error(m.to_owned()));
+        let c = sp(&pending, &Ok(60));
+        assert_eq!(
+            (c.outcome, c.severity),
+            (Outcome::Finding, Some(Severity::Info))
+        );
+        assert!(
+            c.limitations
+                .iter()
+                .any(|l| l.contains("inferred zero") && l.contains("omits the security line"))
+        );
+        // Explicit zero from the file carries no inference note.
+        let c = sp(&p(3, 0), &Ok(60));
+        assert!(!c.limitations.iter().any(|l| l.contains("inferred zero")));
+    }
+
+    #[test]
+    fn unknown_security_count_is_never_zero_or_passed() {
+        for age in [Ok(60), Ok(8 * DAY), Err(ProbeFailure::Missing)] {
+            let c = sp(&p_unknown(3), &age);
+            assert_eq!(c.outcome, Outcome::Incomplete);
+            assert!(c.severity.is_none());
+        }
+    }
+
+    #[tokio::test]
+    async fn collect_reads_cache_age_from_its_own_mtime() {
+        use async_trait::async_trait;
+        use ossiframe_core::{CommandSpec, ExecResult, ExitStatus};
+        struct Fake {
+            cache: Option<&'static str>,
+        }
+        #[async_trait]
+        impl Executor for Fake {
+            async fn run(
+                &self,
+                spec: &CommandSpec,
+                _: &CancelToken,
+            ) -> Result<ExecResult, ExecError> {
+                let last = spec.args().last().cloned().unwrap_or_default();
+                let (code, out) = match (spec.program(), last.as_str()) {
+                    ("cat", UPDATES_AVAILABLE) => (0, "0 updates can be applied immediately.\n"),
+                    ("stat", UPDATES_AVAILABLE) => match self.cache {
+                        Some(t) => (0, t),
+                        None => (1, ""),
+                    },
+                    ("stat", UPDATE_STAMP) => (0, "100\n"),
+                    ("date", "+%s") => (0, "1000\n"),
+                    _ => (1, ""),
+                };
+                Ok(ExecResult {
+                    exit: ExitStatus::Code(code),
+                    stdout: out.to_owned(),
+                    stderr: if code == 1 {
+                        "No such file or directory".to_owned()
+                    } else {
+                        String::new()
+                    },
+                    truncated: false,
+                })
+            }
+        }
+        let cancel = CancelToken::new();
+        let c = collect(
+            &Fake {
+                cache: Some("940\n"),
+            },
+            &cancel,
+        )
+        .await
+        .unwrap();
+        assert_eq!((c.cache_age.ok(), c.age.ok()), (Some(60), Some(900)));
+        // Missing cache mtime: cache age unknown, apt stamp age still known.
+        let c = collect(&Fake { cache: None }, &cancel).await.unwrap();
+        assert_eq!(c.cache_age, Err(ProbeFailure::Missing));
+        assert_eq!(c.age.as_ref().ok(), Some(&900));
+        let check = security_pending(&c.pending, &c.cache_age, &c.age, AT);
+        assert_eq!(check.outcome, Outcome::Incomplete);
+    }
+
+    #[test]
     fn missing_or_unparsable_updates_file_is_never_a_pass() {
-        let c = security_pending(&Err(ProbeFailure::Missing), &Ok(DAY), AT);
+        let c = sp(&Err(ProbeFailure::Missing), &Ok(DAY));
         assert_eq!(c.outcome, Outcome::Unavailable);
         assert!(!c.limitations.is_empty());
-        let c = security_pending(&Err(ProbeFailure::Error("bad".into())), &Ok(DAY), AT);
+        let c = sp(&Err(ProbeFailure::Error("bad".into())), &Ok(DAY));
         assert_eq!(c.outcome, Outcome::Error);
     }
 

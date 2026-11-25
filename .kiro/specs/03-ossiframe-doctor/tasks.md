@@ -128,8 +128,35 @@ Rust (Tokio, Tauri 2) and TypeScript (React). Order: maintenance corrections, `l
     - Mark S03 done in the roadmap with open checks listed. Add to the compatibility doc only facts observed in verification.
     - _Requirements: 17.10, 18.13_
 
+- [x] 11. S03 closure corrections
+  - [x] 11.1 Track discarded service records
+    - In `modules/linux-inventory/src/services.rs`, count skipped or unrecognized JSON records and add a limitation. Keep this separate from the cap-`truncated` flag. In `modules/linux-audit`, `svc.failed` must return `incomplete` and not a clean `passed` when records were discarded.
+    - Small unit tests: skipped records counted with limitation, cap truncation unaffected, `svc.failed` is `incomplete` with discarded records.
+    - _Requirements: 3.3, 3.4, 7.6, 8.4_
+  - [x] 11.2 Read the update-notifier cache age independently
+    - In `modules/linux-audit/src/updates.rs`, read the mtime of `/var/lib/update-notifier/updates-available` with `stat -c %Y` independently of the APT `update-success-stamp`, and report and use that cache age. Security-update information that cannot be recognised must not be treated as zero: return `incomplete` or `error`, never `passed`.
+    - Small unit tests: cache age from its own mtime, missing mtime, unrecognised security line is not `passed`, zero pending with stale cache stays `incomplete`.
+    - _Requirements: 10.4, 10.5, 10.6, 10.8_
+  - [x] 11.3 Align the disk used-percentage with `df`
+    - Compute used percent as `ceil(used*100/(used+avail))` once, and use that value in evidence, report and UI display and in the `disk.low-space` thresholds. Update the explanation and limitation wording to say the value follows `df` rounding.
+    - Update unit tests with boundary cases (79/80, 89/90, 94/95 around the rounding, zero `used+avail`).
+    - _Requirements: 8.2, 8.3_
+  - [x] 11.4 Label the merged service count accurately
+    - Rename the merged count to "units (loaded ∪ installed)" in evidence, the Doctor UI and the report. No behaviour change.
+    - _Requirements: 3.2, 3.6_
+  - [x] 11.5 Rebuild Doctor and verify scan lifecycle in the UI
+    - Rebuild Doctor. Ask the user to verify: "Omit connection address" starts ticked; disconnect during a running scan ends the scan incomplete with completed results kept and marked stale. Record the user's actual results only.
+    - _Requirements: 12.4, 12.13, 14.3, 17.6_
+  - [x] 11.6 Standalone verification from the published revision
+    - Generate an app outside the repository with `--modules linux-audit --rev abc2260a0c2ff7c4c81b1161fd8bb8d213546692` (on origin/main, contains the S03 changes). Confirm `linux-inventory` is resolved automatically, `Cargo.lock` sources are `git+https://github.com/shojibur/Ossiframe?rev=…` and no local monorepo paths remain. Build it. Ask the user to connect to the Lightsail server and run at least one audit operation. Record sanitized results in `docs/verification/s03-ossiframe-doctor.md`. State that the 11.1 to 11.4 changes are local and uncommitted, so they are not in `abc2260`.
+    - _Requirements: 15.1, 15.2, 15.3, 17.8, 18.11_
+  - [ ] 11.7 Close S03 in the docs
+    - Update `docs/verification/s03-ossiframe-doctor.md` and `docs/roadmap.md` with the actual results. Keep unperformed checks explicitly marked not verified. Never fabricate output.
+    - _Requirements: 17.10, 17.11, 18.13_
+
 ## Notes
 
+- Task 11 contains correction work found at S03 closure. It has no optional tasks, no property tests and no commit or push tasks.
 - All test work is inline in the implementing task. There are no optional tasks, no separate test checkpoints and no commit or push tasks.
 - Tasks 9.2 to 9.4 touch only the disposable server the user names, and only with read-only commands.
 - The owner's 13 S03 completion criteria are Requirement 18.
@@ -160,7 +187,13 @@ Rust (Tokio, Tauri 2) and TypeScript (React). Order: maintenance corrections, `l
     { "id": 18, "tasks": ["9.3"] },
     { "id": 19, "tasks": ["9.4"] },
     { "id": 20, "tasks": ["10.1"] },
-    { "id": 21, "tasks": ["10.2"] }
+    { "id": 21, "tasks": ["10.2"] },
+    { "id": 22, "tasks": ["11.1", "11.2"] },
+    { "id": 23, "tasks": ["11.3"] },
+    { "id": 24, "tasks": ["11.4"] },
+    { "id": 25, "tasks": ["11.5"] },
+    { "id": 26, "tasks": ["11.6"] },
+    { "id": 27, "tasks": ["11.7"] }
   ]
 }
 ```

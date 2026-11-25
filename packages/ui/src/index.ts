@@ -8,4 +8,4 @@ export { SeverityBadge, type SeverityLevel } from "./severity-badge";
 export { ConfirmRemoveDialog, CredentialDialog, HostKeyChangedDialog, HostKeyDialog } from "./dialogs";
 export { ServerForm } from "./server-form";
 export { ServerWorkspace, type ModuleUi, type ServerWorkspaceProps } from "./server-workspace";
-export { duration, errorMessage, gib, kbToGib, localTime } from "./format";
+export { diskUsedPercent, duration, errorMessage, gib, kbToGib, localTime } from "./format";

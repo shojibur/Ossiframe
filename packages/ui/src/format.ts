@@ -4,6 +4,12 @@ export function gib(bytes: number): string {
   return `${(bytes / 1024 ** 3).toFixed(1)} GiB`;
 }
 
+/** Used percentage as `df` shows it: ceil(used * 100 / (used + available)). Null when both are 0. */
+export function diskUsedPercent(usedBytes: number, availableBytes: number): number | null {
+  const denom = usedBytes + availableBytes;
+  if (!(denom > 0)) return null;
+  return Math.ceil((usedBytes * 100) / denom);
+}
 export function kbToGib(kb: number): string {
   return gib(kb * 1024);
 }

@@ -26,7 +26,7 @@ const CONTENTS = [
   "Profile name, port, and the connection address (unless omitted).",
   "Hostname, operating system and kernel as reported by the server.",
   "Check results with severity, outcome, evidence lines, explanation, recommendation and limitations.",
-  "Memory and swap totals, filesystems, service counts, listening ports with process names, and installed package names and versions.",
+  "Memory and swap totals, filesystems, systemd unit counts (loaded ∪ installed), listening ports with process names, and installed package names and versions.",
   "Configuration file names and certificate paths read during the assessment.",
   "Scan status, coverage, timestamps, and whether the data is stale.",
 ];

@@ -28,6 +28,19 @@ pub struct DiskInfo {
     pub available_bytes: u64,
 }
 
+impl DiskInfo {
+    /// Used share as `df` shows it: `ceil(used * 100 / (used + available))`.
+    /// `None` when `used + available` is zero. Display, reports and
+    /// thresholds all use this one value.
+    pub fn used_percent(&self) -> Option<u64> {
+        let denom = u128::from(self.used_bytes) + u128::from(self.available_bytes);
+        if denom == 0 {
+            return None;
+        }
+        Some((u128::from(self.used_bytes) * 100).div_ceil(denom) as u64)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProbeError {

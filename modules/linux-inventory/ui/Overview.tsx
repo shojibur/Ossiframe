@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { api, type DiskInfo, type ServerInfo } from "@ossiframe/client";
-import { Button, KeyValue, Notice, duration, gib, kbToGib, localTime } from "@ossiframe/ui";
+import { Button, KeyValue, Notice, diskUsedPercent, duration, gib, kbToGib, localTime } from "@ossiframe/ui";
 import { loadServerInfo, useServerEntry } from "./info-store";
 
 function unavailable(info: ServerInfo, probes: string[]): ReactNode {
@@ -12,8 +12,9 @@ function unavailable(info: ServerInfo, probes: string[]): ReactNode {
   );
 }
 
-function pct(fs: DiskInfo): number {
-  return fs.totalBytes ? Math.round((fs.usedBytes / fs.totalBytes) * 100) : 0;
+function pct(fs: DiskInfo): string {
+  const p = diskUsedPercent(fs.usedBytes, fs.availableBytes);
+  return p === null ? "n/a" : `${p}%`;
 }
 
 function swapText(info: ServerInfo): string | null {
@@ -45,7 +46,7 @@ function Filesystems({ info }: { info: ServerInfo }) {
                 <td className="px-3 py-1.5 font-mono text-[13px] break-all">{f.mount}</td>
                 <td className="px-3 py-1.5 text-right tabular-nums">{gib(f.totalBytes)}</td>
                 <td className="px-3 py-1.5 text-right tabular-nums">
-                  {gib(f.usedBytes)} ({pct(f)}%)
+                  {gib(f.usedBytes)} ({pct(f)})
                 </td>
                 <td className="px-3 py-1.5 text-right tabular-nums">{gib(f.availableBytes)}</td>
               </tr>
@@ -69,7 +70,7 @@ function rows(info: ServerInfo): [string, ReactNode][] {
       : null;
   const fs = info.rootFs;
   const disk = fs
-    ? `${gib(fs.totalBytes)} total, ${gib(fs.usedBytes)} used (${fs.totalBytes ? Math.round((fs.usedBytes / fs.totalBytes) * 100) : 0}%), ${gib(fs.availableBytes)} available`
+    ? `${gib(fs.totalBytes)} total, ${gib(fs.usedBytes)} used (${pct(fs)}), ${gib(fs.availableBytes)} available`
     : null;
   return [
     ["Hostname", info.hostname ?? u(["hostname"])],

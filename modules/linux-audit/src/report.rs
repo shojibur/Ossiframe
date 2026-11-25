@@ -442,7 +442,7 @@ struct Filesystem {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ServiceCounts {
-    unit_count: u64,
+    units_loaded_or_installed: u64,
     failed_count: u64,
 }
 
@@ -532,7 +532,7 @@ impl Infra {
 
         let services = ev("services").and_then(|e| {
             Some(ServiceCounts {
-                unit_count: num(e, "unitCount")?,
+                units_loaded_or_installed: num(e, "unitsLoadedOrInstalled")?,
                 failed_count: num(e, "failedCount")?,
             })
         });
@@ -992,7 +992,10 @@ fn infra_html(o: &mut String, i: &Infra) {
         dl(
             o,
             &[
-                ("Units seen", Some(s.unit_count.to_string())),
+                (
+                    "Units (loaded ∪ installed)",
+                    Some(s.units_loaded_or_installed.to_string()),
+                ),
                 ("Failed units", Some(s.failed_count.to_string())),
             ],
         );

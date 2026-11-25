@@ -62,6 +62,9 @@ pub struct ServicesInfo {
     /// True when more than [`MAX_SERVICES`] units exist; rules must treat the
     /// list as incomplete.
     pub truncated: bool,
+    /// JSON records that were not recognized as service units and are not
+    /// listed. Rules must treat a non-zero count as incomplete.
+    pub unrecognized_records: usize,
     pub limitations: Vec<String>,
     pub probe_errors: Vec<ProbeError>,
 }
@@ -76,8 +79,9 @@ struct Row {
     state: String,
 }
 
-/// Parsed rows and whether the row limit cut the list.
-type Rows = (Vec<Row>, bool);
+/// Parsed rows, whether the row limit cut the list, and how many records
+/// within the limit were discarded as unrecognized.
+type Rows = (Vec<Row>, bool, usize);
 
 fn text(v: &Value, key: &str) -> Option<String> {
     let s: String = v
@@ -114,22 +118,22 @@ fn parse_rows(s: &str, name_key: &str) -> Option<Rows> {
         return None;
     };
     let over = items.len() > MAX_ROWS;
-    let rows = items
-        .iter()
-        .take(MAX_ROWS)
-        .filter_map(|item| {
-            let unit = text(item, name_key).filter(|u| u.ends_with(".service"))?;
-            Some(Row {
+    let mut skipped = 0;
+    let mut rows = Vec::new();
+    for item in items.iter().take(MAX_ROWS) {
+        match text(item, name_key).filter(|u| u.ends_with(".service")) {
+            Some(unit) => rows.push(Row {
                 unit,
                 description: text(item, "description"),
                 load: state(item, "load"),
                 active: state(item, "active"),
                 sub: state(item, "sub"),
                 state: state(item, "state"),
-            })
-        })
-        .collect();
-    Some((rows, over))
+            }),
+            None => skipped += 1,
+        }
+    }
+    Some((rows, over, skipped))
 }
 
 /// Parses `systemctl list-units --output=json`. `None` if not a JSON array.
@@ -145,7 +149,7 @@ fn parse_unit_files(s: &str) -> Option<Rows> {
 /// Merges by unit name, sorted by name, first entry wins. A unit that is
 /// installed but not loaded keeps `unknown` load/active/sub; a loaded unit
 /// without a unit file keeps `installed = false` and `unknown` enablement.
-fn merge(units: Rows, files: Rows) -> (Vec<Service>, bool, Vec<String>) {
+fn merge(units: Rows, files: Rows) -> (Vec<Service>, bool, usize, Vec<String>) {
     let mut by_name: BTreeMap<String, Service> = BTreeMap::new();
     for r in units.0 {
         by_name.entry(r.unit.clone()).or_insert(Service {
@@ -187,7 +191,13 @@ fn merge(units: Rows, files: Rows) -> (Vec<Service>, bool, Vec<String>) {
             "The service list is incomplete: at most {MAX_SERVICES} services are listed."
         ));
     }
-    (list, truncated, limitations)
+    let unrecognized = units.2 + files.2;
+    if unrecognized > 0 {
+        limitations.push(format!(
+            "{unrecognized} service record(s) were not recognized and are not listed."
+        ));
+    }
+    (list, truncated, unrecognized, limitations)
 }
 
 fn unavailable(observed_at: String, probe: &'static str, message: String) -> ServicesInfo {
@@ -231,12 +241,13 @@ pub async fn collect(
             "output not recognized".into(),
         ));
     };
-    let (services, truncated, limitations) = merge(units, files);
+    let (services, truncated, unrecognized_records, limitations) = merge(units, files);
     Ok(ServicesInfo {
         observed_at,
         available: true,
         services,
         truncated,
+        unrecognized_records,
         limitations,
         probe_errors: Vec::new(),
     })
@@ -260,7 +271,7 @@ mod tests {
         {"unit_file":"nginx.service","state":"disabled","preset":"enabled"}
     ]"#;
 
-    fn merged(units: &str, files: &str) -> (Vec<Service>, bool, Vec<String>) {
+    fn merged(units: &str, files: &str) -> (Vec<Service>, bool, usize, Vec<String>) {
         merge(
             parse_units(units).unwrap(),
             parse_unit_files(files).unwrap(),
@@ -269,8 +280,12 @@ mod tests {
 
     #[test]
     fn merges_loaded_and_installed_units() {
-        let (list, truncated, limits) = merged(UNITS, FILES);
-        assert!(!truncated && limits.is_empty());
+        let (list, truncated, skipped, limits) = merged(UNITS, FILES);
+        // `{"not":..}`, `7` and `x.timer` are discarded.
+        assert!(!truncated);
+        assert_eq!(skipped, 3);
+        assert_eq!(limits.len(), 1);
+        assert!(limits[0].starts_with("3 service record(s)"));
         let names: Vec<_> = list.iter().map(|s| s.unit.as_str()).collect();
         assert_eq!(
             names,
@@ -296,7 +311,7 @@ mod tests {
 
     #[test]
     fn installed_but_not_loaded_unit_keeps_unknown_states() {
-        let (list, _, _) = merged(UNITS, FILES);
+        let (list, _, _, _) = merged(UNITS, FILES);
         let nginx = list.iter().find(|s| s.unit == "nginx.service").unwrap();
         assert!(nginx.installed);
         assert_eq!(nginx.enablement, "disabled");
@@ -325,7 +340,7 @@ mod tests {
         }
         assert!(parse_units(&" ".repeat(MAX_JSON + 1)).is_none());
         // Odd state values never leak through.
-        let (rows, _) =
+        let (rows, _, _) =
             parse_units(r#"[{"unit":"a.service","load":"Lo aded!","active":5}]"#).unwrap();
         assert_eq!(
             (rows[0].load.as_str(), rows[0].active.as_str()),
@@ -342,11 +357,12 @@ mod tests {
                 .collect::<Vec<_>>()
                 .join(",")
         );
-        let (list, truncated, limits) = merged("[]", &files);
+        let (list, truncated, skipped, limits) = merged("[]", &files);
         assert_eq!(list.len(), MAX_SERVICES);
         assert!(truncated);
+        assert_eq!(skipped, 0);
         assert_eq!(limits.len(), 1);
-        let (list, truncated, _) = merged("[]", "[]");
+        let (list, truncated, _, _) = merged("[]", "[]");
         assert!(list.is_empty() && !truncated);
     }
 
@@ -387,6 +403,7 @@ mod tests {
         .await
         .unwrap();
         assert!(ok.available && ok.services.len() == 4);
+        assert_eq!(ok.unrecognized_records, 3);
 
         let bad = collect(
             &Fake {

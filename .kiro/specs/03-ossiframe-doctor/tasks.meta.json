@@ -561,6 +561,132 @@
         "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
         "timestamp": 1795584201227
       }
+    ],
+    "11.1 Track discarded service records": [
+      {
+        "executionId": "be3a1f2a-b298-4680-a065-bbe642029038",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795585231650
+      },
+      {
+        "executionId": "be3a1f2a-b298-4680-a065-bbe642029038",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795585253097
+      },
+      {
+        "executionId": "be3a1f2a-b298-4680-a065-bbe642029038",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795585524281
+      }
+    ],
+    "11.2 Read the update-notifier cache age independently": [
+      {
+        "executionId": "be3a1f2a-b298-4680-a065-bbe642029038",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795585231902
+      },
+      {
+        "executionId": "be3a1f2a-b298-4680-a065-bbe642029038",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795585253693
+      },
+      {
+        "executionId": "be3a1f2a-b298-4680-a065-bbe642029038",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795585625005
+      }
+    ],
+    "11.3 Align the disk used-percentage with `df`": [
+      {
+        "executionId": "be3a1f2a-b298-4680-a065-bbe642029038",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795585232126
+      },
+      {
+        "executionId": "be3a1f2a-b298-4680-a065-bbe642029038",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795585626390
+      },
+      {
+        "executionId": "be3a1f2a-b298-4680-a065-bbe642029038",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795585799953
+      }
+    ],
+    "11.4 Label the merged service count accurately": [
+      {
+        "executionId": "be3a1f2a-b298-4680-a065-bbe642029038",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795585232237
+      },
+      {
+        "executionId": "be3a1f2a-b298-4680-a065-bbe642029038",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795585800618
+      },
+      {
+        "executionId": "be3a1f2a-b298-4680-a065-bbe642029038",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795585999335
+      }
+    ],
+    "11.5 Rebuild Doctor and verify scan lifecycle in the UI": [
+      {
+        "executionId": "be3a1f2a-b298-4680-a065-bbe642029038",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795585232285
+      },
+      {
+        "executionId": "be3a1f2a-b298-4680-a065-bbe642029038",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795585999862
+      },
+      {
+        "executionId": "be3a1f2a-b298-4680-a065-bbe642029038",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795586067857
+      }
+    ],
+    "11.6 Standalone verification from the published revision": [
+      {
+        "executionId": "be3a1f2a-b298-4680-a065-bbe642029038",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795585232342
+      },
+      {
+        "executionId": "be3a1f2a-b298-4680-a065-bbe642029038",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795586068441
+      },
+      {
+        "executionId": "be3a1f2a-b298-4680-a065-bbe642029038",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795586568368
+      }
+    ],
+    "11.7 Close S03 in the docs": [
+      {
+        "executionId": "be3a1f2a-b298-4680-a065-bbe642029038",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795585232412
+      },
+      {
+        "executionId": "be3a1f2a-b298-4680-a065-bbe642029038",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795586569357
+      },
+      {
+        "executionId": "be3a1f2a-b298-4680-a065-bbe642029038",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795586668014
+      }
+    ],
+    "11. S03 closure corrections": [
+      {
+        "executionId": "be3a1f2a-b298-4680-a065-bbe642029038",
+        "chatSessionId": "sess_892c287d-0091-4caf-a1d8-1959f9b1cc0b",
+        "timestamp": 1795586668084
+      }
     ]
   }
 }

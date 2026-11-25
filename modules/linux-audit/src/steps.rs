@@ -57,7 +57,8 @@ async fn services(ctx: &OperationContext<'_>) -> Result<StepResult, OperationErr
     let evidence = json!({
         "available": info.available,
         "truncated": info.truncated,
-        "unitCount": info.services.len(),
+        "unrecognizedRecords": info.unrecognized_records,
+        "unitsLoadedOrInstalled": info.services.len(),
         "failedCount": info.services.iter().filter(|s| s.active == "failed").count(),
         "services": info.services,
         "limitations": info.limitations,
@@ -152,15 +153,16 @@ async fn updates(ctx: &OperationContext<'_>) -> Result<StepResult, OperationErro
     let d = upd::collect(ctx.exec, ctx.cancel).await?;
     let (reboot_check, reboot) = upd::reboot_required(&d.reboot, &at);
     let checks = vec![
-        upd::security_pending(&d.pending, &d.age, &at),
+        upd::security_pending(&d.pending, &d.cache_age, &d.age, &at),
         upd::metadata_stale(&d.age, &at),
         reboot_check,
     ];
     let pending = d.pending.as_ref().ok();
     let evidence = json!({
         "pendingUpdates": pending.map(|p| p.total),
-        "pendingSecurity": pending.map(|p| p.security),
+        "pendingSecurity": pending.and_then(|p| p.security),
         "metadataAgeSeconds": d.age.as_ref().ok(),
+        "cacheAgeSeconds": d.cache_age.as_ref().ok(),
         "rebootRequired": reboot,
         "source": "cached update-notifier and apt metadata, not live repository state",
     });
@@ -358,7 +360,7 @@ mod tests {
         let list = r.evidence["services"].as_array().unwrap();
         assert_eq!(list.len(), 1);
         assert_eq!(list[0]["unit"], "ssh.service");
-        assert_eq!(r.evidence["unitCount"], 1);
+        assert_eq!(r.evidence["unitsLoadedOrInstalled"], 1);
         assert!(r.evidence["limitations"].is_array());
     }
 
