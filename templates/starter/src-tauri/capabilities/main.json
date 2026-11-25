@@ -15,6 +15,7 @@
     "allow-replace-host-key",
     "allow-cancel-operation",
     "allow-run-operation",
-    "allow-list-modules"
+    "allow-list-modules"{{permissions_comma}}
+    {{provision_permissions}}
   ]
 }

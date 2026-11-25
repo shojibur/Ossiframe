@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-provision-reconcile"
+description = "Enables the provision_reconcile command without any pre-configured scope."
+commands.allow = ["provision_reconcile"]
+
+[[permission]]
+identifier = "deny-provision-reconcile"
+description = "Denies the provision_reconcile command without any pre-configured scope."
+commands.deny = ["provision_reconcile"]

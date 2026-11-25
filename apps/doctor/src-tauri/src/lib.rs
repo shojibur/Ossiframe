@@ -100,6 +100,110 @@ mod tests {
         );
     }
 
+    // Provisioning boundary (S04).
+    //
+    // `PROVISION_COMMAND_NAMES` only exists when `ossiframe-desktop` is built
+    // with its `provisioning` feature, which Doctor must not enable. The names
+    // are therefore read from the desktop crate's source text and cross-checked
+    // against a hardcoded copy, so a renamed or added command fails here.
+    //
+    // Honest limits of this boundary:
+    // - It rests on command registration (invoke handler, `build.rs` manifest,
+    //   capability file), not on Cargo features. `cargo build --workspace`
+    //   unifies features, so when Deploy is in the same build the
+    //   `provisioning` code is compiled once and shared, including into the
+    //   workspace artifacts for Doctor's library. Compiled-in code is not
+    //   reachable from the frontend unless a command is registered and
+    //   granted, and Doctor does neither. These tests check exactly that.
+    // - They are text checks. They do not execute the Tauri runtime ACL.
+    const HARDCODED_PROVISION_COMMANDS: &[&str] = &[
+        "provision_components",
+        "provision_preflight",
+        "provision_create_plan",
+        "provision_approve_plan",
+        "provision_cancel",
+        "provision_reconcile",
+        "provision_mark_resolved",
+        "provision_release_stale_lock",
+        "provision_get_operation",
+        "provision_list_operations",
+    ];
+
+    fn provision_names_from_desktop_source() -> Vec<String> {
+        let src = include_str!("../../../../crates/ossiframe-desktop/src/provisioning/commands.rs");
+        let start = src
+            .find("pub const PROVISION_COMMAND_NAMES")
+            .expect("PROVISION_COMMAND_NAMES present");
+        let body = &src[start..];
+        let end = body.find("];").expect("end of list");
+        body[..end]
+            .lines()
+            .filter_map(|l| l.trim().strip_prefix('"'))
+            .filter_map(|l| l.strip_suffix("\","))
+            .map(str::to_owned)
+            .collect()
+    }
+
+    /// Production part of this file: everything before the test module.
+    fn production_source() -> &'static str {
+        let src = include_str!("lib.rs");
+        &src[..src.find("#[cfg(test)]").expect("test module marker")]
+    }
+
+    #[test]
+    fn hardcoded_provision_names_match_desktop_source() {
+        assert_eq!(
+            provision_names_from_desktop_source(),
+            HARDCODED_PROVISION_COMMANDS
+        );
+    }
+
+    #[test]
+    fn no_provision_command_in_capability_manifest_or_handler() {
+        let capability = include_str!("../capabilities/main.json");
+        let build = include_str!("../build.rs");
+        let handler = production_source();
+        for name in HARDCODED_PROVISION_COMMANDS {
+            for (what, text) in [
+                ("capability", capability),
+                ("build.rs", build),
+                ("invoke handler source", handler),
+            ] {
+                assert!(!text.contains(name), "{what} contains {name}");
+                assert!(
+                    !text.contains(&kebab(name)),
+                    "{what} contains {}",
+                    kebab(name)
+                );
+            }
+        }
+        // Also catch any other provisioning-flavoured name or setup call.
+        for (what, text) in [
+            ("capability", capability),
+            ("build.rs", build),
+            ("invoke handler source", handler),
+        ] {
+            assert!(!text.contains("provision"), "{what} mentions provision");
+        }
+    }
+
+    #[test]
+    fn manifest_does_not_enable_provisioning_or_depend_on_it() {
+        let toml = include_str!("../Cargo.toml");
+        assert!(
+            !toml.contains("provisioning"),
+            "Cargo.toml mentions provisioning"
+        );
+        assert!(!toml.contains("ossiframe-mod-ubuntu-provisioning"));
+        assert!(!toml.contains("ossiframe-deploy"));
+        // Doctor enables only the `tauri` feature of the desktop crate.
+        let line = toml
+            .lines()
+            .find(|l| l.starts_with("ossiframe-desktop"))
+            .expect("ossiframe-desktop dependency");
+        assert!(line.contains("features = [\"tauri\"]"), "{line}");
+    }
+
     #[test]
     fn capability_has_no_dialog_or_fs_permissions() {
         let text = include_str!("../capabilities/main.json");

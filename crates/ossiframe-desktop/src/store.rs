@@ -13,6 +13,10 @@ pub enum StoreError {
     NotFound,
     #[error("a host key is already pinned for this server")]
     AlreadyPinned,
+    /// The server has an operation that is pending, running, verifying or
+    /// has an unknown outcome.
+    #[error("the server has an unresolved operation")]
+    InUse,
     #[error("storage error: {0}")]
     Db(String),
 }
@@ -63,7 +67,70 @@ const MIGRATIONS: &[&str] = &[
         sha256 TEXT NOT NULL,
         pinned_at TEXT NOT NULL
     );",
+    // 2: operation history, shared by every app (the tables stay empty in
+    // apps that never provision). History survives profile removal: the
+    // server reference is nulled and the identity snapshot stays. No secret
+    // column by design.
+    "CREATE TABLE operations (
+        id TEXT PRIMARY KEY,
+        server_id TEXT REFERENCES servers(id) ON DELETE SET NULL,
+        server_name TEXT NOT NULL,
+        server_host TEXT NOT NULL,
+        server_port INTEGER NOT NULL,
+        server_user TEXT NOT NULL,
+        host_key_sha256 TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        plan_digest TEXT NOT NULL,
+        plan_json TEXT NOT NULL,
+        status TEXT NOT NULL,
+        cancel_requested INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        started_at TEXT,
+        finished_at TEXT,
+        error TEXT,
+        verification_json TEXT,
+        resolution_json TEXT
+    );
+    CREATE TABLE operation_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        operation_id TEXT REFERENCES operations(id) ON DELETE CASCADE,
+        server_label TEXT NOT NULL,
+        at TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        from_state TEXT,
+        to_state TEXT,
+        unit_name TEXT,
+        detail TEXT
+    );
+    CREATE TABLE operation_steps (
+        operation_id TEXT NOT NULL REFERENCES operations(id) ON DELETE CASCADE,
+        idx INTEGER NOT NULL,
+        step_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        unit_name TEXT,
+        status TEXT NOT NULL,
+        started_at TEXT,
+        finished_at TEXT,
+        exit_code INTEGER,
+        output TEXT,
+        PRIMARY KEY (operation_id, idx)
+    );
+    CREATE INDEX operations_server ON operations(server_id, created_at);
+    CREATE TABLE meta (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+    );
+    INSERT INTO meta (key, value) VALUES ('installation_id', lower(hex(randomblob(16))));",
 ];
+
+/// Statuses in which a server is in use. Must match the camelCase names of
+/// `ossiframe_core::OperationState`.
+const UNRESOLVED_SQL: &str = "('pending','running','verifying','unknownOutcome')";
+
+#[cfg(feature = "provisioning")]
+mod operations;
+#[cfg(feature = "provisioning")]
+pub use operations::*;
 
 pub struct Store {
     conn: Mutex<Connection>,
@@ -137,6 +204,23 @@ impl Store {
         let (kind, path) = auth_cols(&r.auth);
         let mut db = self.db();
         let tx = db.transaction()?;
+        let old: Option<(String, u32, String, String, Option<String>)> = tx
+            .query_row(
+                "SELECT host, port, username, auth_kind, key_path FROM servers WHERE id=?1",
+                [&r.id],
+                |x| Ok((x.get(0)?, x.get(1)?, x.get(2)?, x.get(3)?, x.get(4)?)),
+            )
+            .optional()?;
+        let old = old.ok_or(StoreError::NotFound)?;
+        // A display-name change never redirects an operation; anything else can.
+        let material = old.0 != r.host.as_str()
+            || old.1 != u32::from(r.port.get())
+            || old.2 != r.username.as_str()
+            || old.3 != kind
+            || old.4.as_deref() != path;
+        if material && unresolved(&tx, &r.id)? {
+            return Err(StoreError::InUse);
+        }
         let n = tx.execute(
             "UPDATE servers SET name=?2, host=?3, port=?4, username=?5, auth_kind=?6, key_path=?7, secret_ref=?8, updated_at=?9 WHERE id=?1",
             params![r.id, r.name.as_str(), r.host.as_str(), r.port.get(), r.username.as_str(), kind, path, r.secret_ref, r.updated_at],
@@ -163,14 +247,27 @@ impl Store {
         }
     }
 
-    /// Deletes the profile and, through the foreign key, its pin.
+    /// Deletes the profile and, through the foreign key, its pin. Operation
+    /// history is kept with a null server reference. Refused while the
+    /// server has an unresolved operation.
     pub fn delete(&self, id: &str) -> Result<(), StoreError> {
-        let n = self.db().execute("DELETE FROM servers WHERE id=?1", [id])?;
-        if n == 0 {
-            Err(StoreError::NotFound)
-        } else {
-            Ok(())
+        let mut db = self.db();
+        let tx = db.transaction()?;
+        if unresolved(&tx, id)? {
+            return Err(StoreError::InUse);
         }
+        let n = tx.execute("DELETE FROM servers WHERE id=?1", [id])?;
+        if n == 0 {
+            return Err(StoreError::NotFound);
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// True while the server has an operation that is pending, running,
+    /// verifying or has an unknown outcome.
+    pub fn has_unresolved_operation(&self, server_id: &str) -> Result<bool, StoreError> {
+        unresolved(&self.db(), server_id)
     }
 
     pub fn get_pin(&self, server_id: &str) -> Result<Option<PinnedHostKey>, StoreError> {
@@ -222,6 +319,9 @@ impl Store {
     ) -> Result<(), StoreError> {
         let mut db = self.db();
         let tx = db.transaction()?;
+        if unresolved(&tx, server_id)? {
+            return Err(StoreError::InUse);
+        }
         tx.execute("DELETE FROM host_keys WHERE server_id=?1", [server_id])?;
         tx.execute(
             "INSERT INTO host_keys (server_id, key_type, public_key, sha256, pinned_at) VALUES (?1, ?2, ?3, ?4, ?5)",
@@ -236,6 +336,16 @@ impl Store {
             .execute("DELETE FROM host_keys WHERE server_id=?1", [server_id])?;
         Ok(())
     }
+}
+
+fn unresolved(conn: &Connection, server_id: &str) -> Result<bool, StoreError> {
+    Ok(conn.query_row(
+        &format!(
+            "SELECT EXISTS(SELECT 1 FROM operations WHERE server_id=?1 AND status IN {UNRESOLVED_SQL})"
+        ),
+        [server_id],
+        |r| r.get(0),
+    )?)
 }
 
 fn migrate(conn: &mut Connection) -> Result<(), StoreError> {
@@ -361,8 +471,15 @@ pub(crate) mod tests {
         let n: i64 = conn
             .query_row("SELECT COUNT(*) FROM schema_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(n, 1);
-        for table in ["servers", "host_keys"] {
+        assert_eq!(n, 2);
+        for table in [
+            "servers",
+            "host_keys",
+            "operations",
+            "operation_steps",
+            "operation_events",
+            "meta",
+        ] {
             let mut stmt = conn
                 .prepare(&format!("PRAGMA table_info({table})"))
                 .unwrap();
@@ -377,6 +494,161 @@ pub(crate) mod tests {
                     "{table}.{c}"
                 );
             }
+        }
+    }
+
+    /// Inserts an operation row directly, so these tests run without the
+    /// `provisioning` feature.
+    pub(crate) fn raw_operation(s: &Store, id: &str, server: &str, status: &str) {
+        s.db()
+            .execute(
+                "INSERT INTO operations (id, server_id, server_name, server_host, server_port, server_user, host_key_sha256, kind, plan_digest, plan_json, status, created_at)
+                 VALUES (?1, ?2, 'snap-name', 'snap.example.com', 2222, 'deploy', 'SHA256:snap', 'provision', 'd', '{}', ?3, 'now')",
+                params![id, server, status],
+            )
+            .unwrap();
+    }
+
+    #[test]
+    fn migration_2_upgrades_an_existing_v1_database_in_place() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
+        // A database as migration 1 alone created it, with data.
+        conn.execute_batch(MIGRATIONS[0]).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE schema_version (version INTEGER NOT NULL);
+             INSERT INTO schema_version VALUES (1);
+             INSERT INTO servers VALUES ('a','web','example.com',22,'root','password',NULL,'ref','t','t');
+             INSERT INTO host_keys VALUES ('a','ssh-ed25519',x'0102','SHA256:k','t');",
+        )
+        .unwrap();
+        let s = Store::init(conn).unwrap();
+        let rec = s.get("a").unwrap();
+        assert_eq!(rec.secret_ref.as_deref(), Some("ref"));
+        assert_eq!(s.get_pin("a").unwrap().unwrap().sha256, "SHA256:k");
+        assert!(!s.has_unresolved_operation("a").unwrap());
+        let version: i64 = s
+            .db()
+            .query_row("SELECT MAX(version) FROM schema_version", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(version, 2);
+        let id: String = s
+            .db()
+            .query_row(
+                "SELECT value FROM meta WHERE key='installation_id'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(id.len(), 32);
+    }
+
+    #[test]
+    fn history_survives_profile_removal_without_cascade() {
+        let s = Store::open_in_memory().unwrap();
+        s.insert(&record("a")).unwrap();
+        s.pin_host_key("a", &key(1)).unwrap();
+        raw_operation(&s, "op", "a", "succeeded");
+        s.db()
+            .execute(
+                "INSERT INTO operation_steps (operation_id, idx, step_id, title, status) VALUES ('op',0,'s','t','succeeded')",
+                [],
+            )
+            .unwrap();
+        s.db()
+            .execute(
+                "INSERT INTO operation_events (operation_id, server_label, at, kind) VALUES ('op','snap-name','t','x')",
+                [],
+            )
+            .unwrap();
+        s.delete("a").unwrap();
+        let (server_id, name, host, port, user, hk): (Option<String>, String, String, u32, String, String) = s
+            .db()
+            .query_row(
+                "SELECT server_id, server_name, server_host, server_port, server_user, host_key_sha256 FROM operations WHERE id='op'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?)),
+            )
+            .unwrap();
+        assert_eq!(server_id, None);
+        assert_eq!(
+            (
+                name.as_str(),
+                host.as_str(),
+                port,
+                user.as_str(),
+                hk.as_str()
+            ),
+            (
+                "snap-name",
+                "snap.example.com",
+                2222,
+                "deploy",
+                "SHA256:snap"
+            )
+        );
+        for table in ["operation_steps", "operation_events"] {
+            let n: i64 = s
+                .db()
+                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0))
+                .unwrap();
+            assert_eq!(n, 1, "{table} kept");
+        }
+    }
+
+    #[test]
+    fn profile_changes_are_blocked_for_each_unresolved_state() {
+        let s = Store::open_in_memory().unwrap();
+        for status in ["pending", "running", "verifying", "unknownOutcome"] {
+            let id = format!("srv-{status}");
+            s.insert(&record(&id)).unwrap();
+            s.pin_host_key(&id, &key(1)).unwrap();
+            raw_operation(&s, &format!("op-{status}"), &id, status);
+            assert!(s.has_unresolved_operation(&id).unwrap());
+
+            assert_eq!(s.delete(&id), Err(StoreError::InUse), "{status}");
+            assert_eq!(s.replace_host_key(&id, &key(2)), Err(StoreError::InUse));
+            assert_eq!(s.get_pin(&id).unwrap().unwrap().public_key, vec![1; 32]);
+
+            let r = s.get(&id).unwrap();
+            let mut edits = Vec::new();
+            let mut e = r.clone();
+            e.host = Hostname::parse("other.example.com").unwrap();
+            edits.push(e);
+            let mut e = r.clone();
+            e.port = Port::new(2222).unwrap();
+            edits.push(e);
+            let mut e = r.clone();
+            e.username = SshUser::parse("deploy").unwrap();
+            edits.push(e);
+            let mut e = r.clone();
+            e.auth = AuthConfig::KeyFile(KeyPath::parse("/home/u/.ssh/id").unwrap());
+            edits.push(e);
+            for e in &edits {
+                assert_eq!(s.update(e, true), Err(StoreError::InUse), "{status}");
+            }
+            assert!(s.get_pin(&id).unwrap().is_some(), "pin kept");
+            assert_eq!(s.get(&id).unwrap().host, r.host);
+
+            let mut renamed = r.clone();
+            renamed.name = ServerName::parse("renamed").unwrap();
+            s.update(&renamed, false).unwrap();
+            assert_eq!(s.get(&id).unwrap().name.as_str(), "renamed");
+        }
+    }
+
+    #[test]
+    fn terminal_operations_do_not_block_changes() {
+        let s = Store::open_in_memory().unwrap();
+        for (n, status) in ["succeeded", "failed", "cancelled"].into_iter().enumerate() {
+            let id = format!("s{n}");
+            s.insert(&record(&id)).unwrap();
+            raw_operation(&s, &format!("op{n}"), &id, status);
+            assert!(!s.has_unresolved_operation(&id).unwrap());
+            let mut e = s.get(&id).unwrap();
+            e.host = Hostname::parse("other.example.com").unwrap();
+            s.update(&e, true).unwrap();
+            s.delete(&id).unwrap();
         }
     }
 

@@ -102,6 +102,9 @@ pub async fn run_probe(
         }
         Err(ExecError::Timeout) => Ok(Err(ProbeFailure::Error("command timed out".to_owned()))),
         Err(ExecError::Channel(_)) => Ok(Err(ProbeFailure::Error("channel error".to_owned()))),
+        Err(ExecError::PrivilegeDenied) => Ok(Err(ProbeFailure::Error(
+            "privileged commands are not allowed".to_owned(),
+        ))),
         Err(e @ (ExecError::Cancelled | ExecError::ConnectionLost)) => Err(e),
     }
 }

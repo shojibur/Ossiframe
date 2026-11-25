@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-provision-approve-plan"
+description = "Enables the provision_approve_plan command without any pre-configured scope."
+commands.allow = ["provision_approve_plan"]
+
+[[permission]]
+identifier = "deny-provision-approve-plan"
+description = "Denies the provision_approve_plan command without any pre-configured scope."
+commands.deny = ["provision_approve_plan"]

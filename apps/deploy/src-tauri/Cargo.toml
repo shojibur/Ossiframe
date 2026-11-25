@@ -1,0 +1,22 @@
+[package]
+name = "ossiframe-deploy"
+description = "Ossiframe Deploy: server provisioning and application deployment"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "ossiframe_deploy_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+ossiframe-core = { version = "0.1.0", path = "../../../crates/ossiframe-core" }
+ossiframe-desktop = { version = "0.1.0", path = "../../../crates/ossiframe-desktop", features = ["tauri", "provisioning"] }
+ossiframe-mod-linux-inventory = { version = "0.1.0", path = "../../../modules/linux-inventory" }
+ossiframe-mod-ubuntu-provisioning = { version = "0.1.0", path = "../../../modules/ubuntu-provisioning" }
+serde_json = "1.0.154"
+tauri = { version = "2", features = [] }

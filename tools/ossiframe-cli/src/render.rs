@@ -110,7 +110,25 @@ pub fn dep_line(name: &str, source: &OssiframeSource, repo_dir: &str, extra: &st
     format!("{name} = {{ {src}{extra} }}")
 }
 
-/// The ten template tokens, filled from validated inputs.
+/// Command names the provisioning opt-in adds (kept equal to
+/// `ossiframe_desktop::provisioning::PROVISION_COMMAND_NAMES` by a test).
+const PROVISION_COMMANDS: [&str; 10] = [
+    "provision_components",
+    "provision_preflight",
+    "provision_create_plan",
+    "provision_approve_plan",
+    "provision_cancel",
+    "provision_reconcile",
+    "provision_mark_resolved",
+    "provision_release_stale_lock",
+    "provision_get_operation",
+    "provision_list_operations",
+];
+
+/// The template tokens, filled from validated inputs. The provisioning tokens
+/// are empty unless a privileged module is selected (the caller has already
+/// checked `--enable-provisioning`), so the default output has none of them.
+#[allow(clippy::too_many_lines)]
 pub fn starter_tokens(
     product_name: &str,
     identifier: &str,
@@ -119,13 +137,19 @@ pub fn starter_tokens(
     source: &OssiframeSource,
     modules: &[ResolvedModule],
 ) -> Tokens {
+    let prov = modules.iter().find(|m| m.entry.privileged);
+    let on = prov.is_some();
     let ossiframe_deps = vec![
         dep_line("ossiframe-core", source, "crates/ossiframe-core", ""),
         dep_line(
             "ossiframe-desktop",
             source,
             "crates/ossiframe-desktop",
-            ", features = [\"tauri\"]",
+            if on {
+                ", features = [\"tauri\", \"provisioning\"]"
+            } else {
+                ", features = [\"tauri\"]"
+            },
         ),
     ];
     let module_deps = modules
@@ -144,11 +168,80 @@ pub fn starter_tokens(
         })
         .collect();
     let with_ui = || modules.iter().filter(|m| m.entry.ui_dir.is_some());
+    let when = |lines: Vec<String>| if on { lines } else { Vec::new() };
+    let names = || PROVISION_COMMANDS.iter();
+    let last = PROVISION_COMMANDS.len() - 1;
     Tokens::default()
         .inline("product_name", product_name)
         .inline("identifier", identifier)
         .inline("package_name", package_name)
         .inline("lib_name", lib_name)
+        .inline("setup_try", if on { "?;" } else { "" })
+        .inline(
+            "command_names_iter",
+            if on {
+                "COMMAND_NAMES.iter().chain(PROVISION_COMMAND_NAMES)"
+            } else {
+                "COMMAND_NAMES.iter()"
+            },
+        )
+        .inline(
+            "command_names_loop",
+            if on {
+                "COMMAND_NAMES.iter().chain(PROVISION_COMMAND_NAMES)"
+            } else {
+                "COMMAND_NAMES"
+            },
+        )
+        .inline(
+            "command_names_len",
+            if on {
+                "COMMAND_NAMES.len() + PROVISION_COMMAND_NAMES.len()"
+            } else {
+                "COMMAND_NAMES.len()"
+            },
+        )
+        .inline("permissions_comma", if on { "," } else { "" })
+        .lines(
+            "provision_uses",
+            when(vec![
+                "use ossiframe_desktop::provisioning::{self, commands as provision};".to_owned(),
+                "use std::sync::Arc;".to_owned(),
+            ]),
+        )
+        .lines(
+            "provision_setup",
+            when(vec![format!(
+                "provisioning::setup(app, Arc::new({}))",
+                prov.map_or("", |m| m.entry.type_path)
+            )]),
+        )
+        .lines(
+            "provision_handlers",
+            when(names().map(|n| format!("provision::{n},")).collect()),
+        )
+        .lines(
+            "provision_build_names",
+            when(names().map(|n| format!("\"{n}\",")).collect()),
+        )
+        .lines(
+            "provision_permissions",
+            when(
+                names()
+                    .enumerate()
+                    .map(|(i, n)| {
+                        let sep = if i == last { "" } else { "," };
+                        format!("\"allow-{}\"{sep}", n.replace('_', "-"))
+                    })
+                    .collect(),
+            ),
+        )
+        .lines(
+            "provision_test_uses",
+            when(vec![
+                "use ossiframe_desktop::provisioning::PROVISION_COMMAND_NAMES;".to_owned(),
+            ]),
+        )
         .lines("ossiframe_deps", ossiframe_deps)
         .lines("module_deps", module_deps)
         .lines(
@@ -212,6 +305,33 @@ mod tests {
         // Values are not re-scanned, but a value that brings `{{` is caught.
         let bad = Tokens::default().inline("a", "{{b");
         assert_eq!(render("{{a}}", &bad).unwrap_err(), RenderError::Leftover);
+    }
+
+    #[test]
+    fn provisioning_tokens_are_empty_without_the_module_and_filled_with_it() {
+        let src = OssiframeSource::Git {
+            rev: "e".repeat(40),
+        };
+        let probe = "{{ossiframe_deps}}\n{{provision_uses}}\n{{provision_setup}}\n{{provision_handlers}}\n{{provision_build_names}}\n{{provision_permissions}}\n{{provision_test_uses}}\n[{{setup_try}}{{permissions_comma}}{{command_names_len}}]\n";
+        let off = render(probe, &tokens_for(&src, &["linux-inventory"], false)).unwrap();
+        assert!(!off.contains("provision"), "{off}");
+        assert!(off.contains("features = [\"tauri\"]") && off.ends_with("[COMMAND_NAMES.len()]\n"));
+        let on = render(probe, &tokens_for(&src, &["ubuntu-provisioning"], false)).unwrap();
+        assert!(
+            on.contains("features = [\"tauri\", \"provisioning\"]"),
+            "{on}"
+        );
+        assert!(on.contains("provisioning::setup(app, Arc::new(ossiframe_mod_ubuntu_provisioning::UbuntuProvisioning))"));
+        for n in PROVISION_COMMANDS {
+            let perm = format!("\"allow-{}\"", n.replace('_', "-"));
+            for needle in [format!("provision::{n},"), format!("\"{n}\","), perm] {
+                assert!(on.contains(&needle), "missing {needle}");
+            }
+        }
+        assert!(
+            on.contains("\"allow-provision-list-operations\"\n"),
+            "last has no comma"
+        );
     }
 
     #[test]

@@ -6,6 +6,10 @@
 
 pub mod dispatch;
 pub mod ipc;
+#[cfg(feature = "provisioning")]
+pub mod provisioning;
+#[cfg(feature = "provisioning")]
+pub mod remote_lock;
 pub mod service;
 pub mod session;
 pub mod store;

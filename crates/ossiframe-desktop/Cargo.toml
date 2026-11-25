@@ -13,6 +13,7 @@ ossiframe-ssh = { version = "0.1.0", path = "../ossiframe-ssh" }
 rusqlite = { version = "0.43.0", features = ["bundled"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
+sha2 = { version = "0.11.1", optional = true }
 tauri = { version = "2", default-features = false, optional = true }
 thiserror = "2.0.21"
 time = { version = "0.3.55", features = ["formatting"] }
@@ -28,3 +29,4 @@ tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "time", "
 
 [features]
 tauri = ["dep:tauri"]
+provisioning = ["tauri", "dep:sha2"]

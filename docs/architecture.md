@@ -13,8 +13,7 @@ flowchart TB
   end
   subgraph Modules
     Inv["linux-inventory"]
-    Prov["ubuntu-provisioning, nginx, php, mysql"]
-    Lar["laravel"]
+    Prov["ubuntu-provisioning"]
     Aud["linux-audit"]
     Ex["custom module example"]
   end
@@ -24,9 +23,11 @@ flowchart TB
     D["ossiframe-desktop"]
     UI["@ossiframe/ui, @ossiframe/client"]
   end
-  Deploy --> Inv & Prov & Lar
+  Deploy --> Inv & Prov
   Doctor --> Inv & Aud
   Aud --> Inv
+  Prov --> Inv
+  Gen -. "--enable-provisioning" .-> Prov
   Gen --> Inv & Ex
   Modules --> C
   Apps --> D & UI
@@ -57,7 +58,7 @@ The module manifest is metadata. Security boundaries are enforced by the executo
 
 ## Applications
 
-Every app has the same shape: a React frontend in `src/`, a Tauri backend in `src-tauri/` that lists its modules, and its own build. Deploy uses inventory, provisioning, hosting and Laravel modules. Doctor uses the `linux-inventory` and `linux-audit` modules; `linux-audit` declares `linux-inventory` as a dependency. It is read-only because its IPC exposes only typed discovery operations built from predefined commands; the frontend cannot supply programs, shell commands, file paths or privileged operations. Trusted compiled Rust code is not sandboxed from its own process privileges.
+Every app has the same shape: a React frontend in `src/`, a Tauri backend in `src-tauri/` that lists its modules, and its own build. Deploy (`apps/deploy`) registers `linux-inventory` and `ubuntu-provisioning`; Laravel and hosting modules do not exist yet. Doctor uses the `linux-inventory` and `linux-audit` modules; `linux-audit` declares `linux-inventory` as a dependency. It is read-only because its IPC exposes only typed discovery operations built from predefined commands; the frontend cannot supply programs, shell commands, file paths or privileged operations. Trusted compiled Rust code is not sandboxed from its own process privileges.
 
 ## SSH communication
 
@@ -65,20 +66,41 @@ Only the Rust backend talks to servers. The frontend never sees private keys or 
 
 ## Remote execution
 
-- Trusted Rust code builds a `CommandSpec`: program, arguments, timeout. Core quotes arguments and assembles one command line.
-- The executor returns exit status and bounded, redacted output, with timeout and cancellation. Output is not streamed to the frontend in S01.
-- Privileged execution (`sudo -n`), secrets over stdin, and operation records are added in S04 when provisioning needs them.
+- Trusted Rust code builds a `CommandSpec`: program, arguments, timeout, privilege. Core quotes arguments and assembles one command line. There is no stdin field yet.
+- `Privilege::User` is the default. `CommandSpec::privileged` (`Privilege::Root`) requires an absolute program path and renders as `'/usr/bin/sudo' '-n' '--' '<program>' ...`. `sudo -n` fails instead of prompting.
+- The executor returns exit status and bounded, redacted output, with timeout and cancellation. Output is not streamed to the frontend.
+- `ReadOnly` wraps an executor and returns `PrivilegeDenied` for any non-`User` spec. `run_operation` hands modules this wrapper. See [security.md](security.md) for what it does and does not guarantee.
 
-### Operation record (introduced in S04)
+## Provisioning (S04)
 
-ID, server ID, type, status, created/started/finished timestamps, sanitized output (size-capped), exit code, error.
+`apps/deploy` is the only app that enables the `ossiframe-desktop` `provisioning` feature. The engine is generic and lives in `ossiframe-desktop`; it calls a `Provisioner` trait defined in Core. `modules/ubuntu-provisioning` implements that trait (Ubuntu 24.04 archive packages only) and registers zero `OperationInfo` entries, so `run_operation` cannot reach it. Core and desktop have no NGINX, PHP or MySQL knowledge; the component data lives in the module.
 
-States: `Pending → Running → Verifying → Succeeded`, plus `Failed`, `Cancelled`, `UnknownOutcome`.
+Ten typed `provision_*` IPC commands take only server, component, plan and operation ids, a digest and a limit. They never take a program, argv, path or privilege.
 
-- An SSH disconnect or app crash during `Running` leaves the operation `UnknownOutcome`. It is never retried automatically; the user inspects the server first.
-- Conflicting mutating operations on the same server or app are blocked with a lock.
-- Steps are idempotent where practical, and critical changes are verified after they run.
-- Durable execution for long provisioning steps (for example `systemd-run` with status files) is investigated in S04, not built in advance.
+```mermaid
+flowchart LR
+  UI["Deploy UI"] -- "ids + digest" --> Cmd["provision_* commands"]
+  Cmd --> Pre["Provisioner.preflight (read-only + sudo -n probe)"]
+  Pre --> Plan["Plan + digest (in memory, 10 min, one per server)"]
+  Plan -- "approve: checks, recheck" --> Lock["remote lock unit"]
+  Lock --> Eng["Engine: ApprovedPlan only"]
+  Eng -- "sudo -n systemd-run" --> Unit["transient unit ossiframe-op-UUID-N (apt-get)"]
+  Eng -- "poll systemctl show, journal tail" --> Unit
+  Eng --> Ver["Provisioner.verify"]
+  Eng --> DB[("SQLite operations")]
+```
+
+Flow: preflight, create plan, approve, execute, verify.
+
+- **Plan.** A deterministic `Plan` (identity snapshot of the server, packages, steps, limitations) is held in memory with its SHA-256 digest. A newer plan for the same server replaces it. Approval consumes it. Approval checks, in order: plan exists, plan id, expiry, digest, server identity (host, port, user, pinned host key), connection, no active or `UnknownOutcome` operation. Then the module's `recheck` looks for drift and the engine takes the remote lock. The type `ApprovedPlan` can only be built by the plan store's approval path.
+- **Steps.** `apt-update` and `apt-install` are durable: each runs as a transient systemd unit started with `/usr/bin/systemd-run --service-type=exec --remain-after-exit` under `sudo -n`, with `DEBIAN_FRONTEND=noninteractive` and `NEEDRESTART_SUSPEND=1` set through `/usr/bin/env`. The engine stores the unit name before launch, polls `systemctl show`, and stores a bounded journal tail. `candidate-check` is a read-only gate between them: package candidates and the full `apt-get install -s` set must come from allowlisted sources. A plan with every package present has zero steps and only verifies.
+- **States.** `Pending`, `Running`, `Verifying`, `Succeeded`, `Failed`, `Cancelled`, `UnknownOutcome`, with a pure transition function. A disconnect, deadline, identity mismatch or crash gives `UnknownOutcome`. Nothing is relaunched or retried, and nothing stops apt, dpkg or the unit. Cancel is honoured between steps only.
+- **Recovery.** `provision_reconcile` collects read-only evidence and settles only what the evidence proves. A missing unit alone never proves failure. `provision_mark_resolved` is a user action, allowed only when the backend's own fresh evidence shows no apt or dpkg process, free lock files and no active step unit. It sets `Failed` with resolution `markedResolved` and repairs nothing.
+- **Remote lock.** The transient unit `ossiframe-provision-lock` (`sleep infinity`, owner record in its description) is taken at approval and kept until a terminal state other than `UnknownOutcome`. systemd refuses a second unit of the same name. It is cooperative: it excludes other Ossiframe instances, not people or other tools. apt and dpkg keep their own locks. A reboot clears it. A stale holder is released only by an explicit user action gated on backend evidence, and a holder owned by a local `UnknownOutcome` operation is released through mark-resolved.
+- **History.** Migration 2 (shared with Doctor's database code) adds operation tables. Each operation keeps an identity snapshot, so history survives profile removal. A profile with an unresolved operation cannot be removed, re-pointed (host, port, user, auth) or have its host key replaced. On startup, in-flight rows become `UnknownOutcome`.
+- **Verification.** `Provisioner::verify` returns per-check results with an `essential` flag. A component is verified only when all its essential checks pass; there are no scores.
+
+Behaviours that depend on a real server are pending verification (task 8 of the S04 spec): `systemd-run --remain-after-exit` keeping a finished unit readable, refusal of a duplicate unit name, `NEEDRESTART_SUSPEND` effect, journal reads, and the verification checks.
 
 ## Runtime independence
 

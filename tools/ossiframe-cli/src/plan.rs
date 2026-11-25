@@ -28,6 +28,8 @@ pub struct CatalogEntry {
     pub ui_dir: Option<&'static str>,
     /// Example modules are copied into the generated app instead of referenced.
     pub is_example: bool,
+    /// Needs root on the server. Only generated with `--enable-provisioning`.
+    pub privileged: bool,
 }
 
 pub fn catalog() -> Vec<CatalogEntry> {
@@ -39,6 +41,7 @@ pub fn catalog() -> Vec<CatalogEntry> {
             crate_dir: "modules/linux-inventory",
             ui_dir: Some("modules/linux-inventory/ui"),
             is_example: false,
+            privileged: false,
         },
         CatalogEntry {
             manifest: ossiframe_mod_linux_audit::LinuxAudit.manifest(),
@@ -47,6 +50,7 @@ pub fn catalog() -> Vec<CatalogEntry> {
             crate_dir: "modules/linux-audit",
             ui_dir: None,
             is_example: false,
+            privileged: false,
         },
         CatalogEntry {
             manifest: ossiframe_mod_ports_example::Ports.manifest(),
@@ -55,6 +59,16 @@ pub fn catalog() -> Vec<CatalogEntry> {
             crate_dir: "examples/custom-module",
             ui_dir: Some("examples/custom-module/ui"),
             is_example: true,
+            privileged: false,
+        },
+        CatalogEntry {
+            manifest: ossiframe_mod_ubuntu_provisioning::UbuntuProvisioning.manifest(),
+            crate_name: "ossiframe-mod-ubuntu-provisioning",
+            type_path: "ossiframe_mod_ubuntu_provisioning::UbuntuProvisioning",
+            crate_dir: "modules/ubuntu-provisioning",
+            ui_dir: Some("modules/ubuntu-provisioning/ui"),
+            is_example: false,
+            privileged: true,
         },
     ]
 }
@@ -111,6 +125,33 @@ pub fn resolve_modules(
             entry: e.clone(),
         })
         .collect())
+}
+
+/// The generated app may run root commands only when the user opted in.
+/// Checked on the resolved list, so a privileged module pulled in as a
+/// dependency is covered too. The flag without such a module is also refused,
+/// so it never silently does nothing.
+pub fn check_privileged(
+    modules: &[ResolvedModule],
+    enable_provisioning: bool,
+) -> Result<(), PlanError> {
+    let privileged: Vec<&str> = modules
+        .iter()
+        .filter(|m| m.entry.privileged)
+        .map(|m| m.id().as_str())
+        .collect();
+    if !privileged.is_empty() && !enable_provisioning {
+        return Err(PlanError::Modules(format!(
+            "'{}' runs commands as root on servers and is off by default; pass --enable-provisioning to generate an app that includes it",
+            privileged.join("', '")
+        )));
+    }
+    if privileged.is_empty() && enable_provisioning {
+        return Err(PlanError::Modules(
+            "--enable-provisioning needs --modules ubuntu-provisioning".to_owned(),
+        ));
+    }
+    Ok(())
 }
 
 /// Where the generated app gets Ossiframe crates from.
@@ -227,6 +268,7 @@ mod tests {
             crate_dir: "x",
             ui_dir: None,
             is_example: example,
+            privileged: false,
         }
     }
     fn ids(v: &[ResolvedModule]) -> Vec<&str> {
@@ -252,6 +294,18 @@ mod tests {
         let m = resolve_modules(&catalog(), &[id("linux-audit")], false).unwrap();
         assert_eq!(ids(&m), ["linux-inventory", "linux-audit"]);
         assert!(m[1].entry.ui_dir.is_none());
+    }
+
+    #[test]
+    fn privileged_module_needs_the_flag_and_the_flag_needs_the_module() {
+        let m = resolve_modules(&catalog(), &[id("ubuntu-provisioning")], false).unwrap();
+        assert_eq!(ids(&m), ["linux-inventory", "ubuntu-provisioning"]);
+        let e = check_privileged(&m, false).unwrap_err().to_string();
+        assert!(e.contains("--enable-provisioning"), "{e}");
+        assert!(check_privileged(&m, true).is_ok());
+        let plain = resolve_modules(&catalog(), &[id("linux-inventory")], false).unwrap();
+        assert!(check_privileged(&plain, false).is_ok());
+        assert!(check_privileged(&plain, true).is_err());
     }
 
     #[test]

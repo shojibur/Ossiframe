@@ -5,6 +5,7 @@
 //! path to read, URL or privilege level. Modules are trusted compile-time code
 //! registered below.
 use ossiframe_core::Registry;
+{{provision_uses}}
 use ossiframe_desktop::tauri_support::{AppSetup, commands, setup};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -23,7 +24,8 @@ pub fn run() {
                     db_file: "app.sqlite3",
                     registry,
                 },
-            )
+            ){{setup_try}}
+            {{provision_setup}}
         })
         .invoke_handler(tauri::generate_handler![
             commands::list_servers,
@@ -37,6 +39,7 @@ pub fn run() {
             commands::cancel_operation,
             commands::run_operation,
             commands::list_modules,
+            {{provision_handlers}}
         ])
         .run(tauri::generate_context!())
         .expect("error while running {{product_name}}");
@@ -44,6 +47,7 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
+    {{provision_test_uses}}
     use ossiframe_desktop::tauri_support::COMMAND_NAMES;
     use std::collections::BTreeSet;
 
@@ -63,19 +67,19 @@ mod tests {
             .filter_map(|p| p.strip_prefix("allow-"))
             .map(str::to_owned)
             .collect();
-        let expected: BTreeSet<String> = COMMAND_NAMES.iter().map(|n| kebab(n)).collect();
+        let expected: BTreeSet<String> = {{command_names_iter}}.map(|n| kebab(n)).collect();
         assert_eq!(allowed, expected);
     }
 
     #[test]
     fn build_manifest_lists_exactly_the_shared_commands() {
         let text = include_str!("../build.rs");
-        for name in COMMAND_NAMES {
+        for name in {{command_names_loop}} {
             assert!(
                 text.contains(&format!("\"{name}\"")),
                 "build.rs lacks {name}"
             );
         }
-        assert_eq!(text.matches("        \"").count(), COMMAND_NAMES.len());
+        assert_eq!(text.matches("        \"").count(), {{command_names_len}});
     }
 }

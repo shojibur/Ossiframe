@@ -7,16 +7,16 @@
 //! functionality is exposed. `args` is opaque JSON that the module validates
 //! in Rust.
 //!
-//! All S02 operations are read-only because the included modules use only
-//! predefined read commands, not because this dispatcher enforces it. S04
-//! must add explicit authorization and approval boundaries before any
-//! mutating or privileged operation exists.
+//! The operation executor is wrapped in [`ReadOnly`], which refuses any
+//! `Privilege::Root` command. It does not classify commands, so read-only
+//! behavior of included modules still comes from their predefined argv.
+//! Privileged work runs only through the approved-plan engine.
 
 use crate::ipc::{IpcError, cap};
 use crate::service::ServerService;
 use ossiframe_core::{
     ModuleId, ModuleManifest, OperationContext, OperationError, OperationId, OperationInfo,
-    Registry, RunError, ValidationError,
+    ReadOnly, Registry, RunError, ValidationError,
 };
 use serde::Serialize;
 
@@ -155,8 +155,11 @@ pub async fn run_operation(
     } = checked;
     let result = service
         .with_connection(&server_id, |conn, cancel| async move {
+            // Privileged commands are refused on this path. They run only
+            // through the approved-plan engine.
+            let guard = ReadOnly(&*conn);
             let ctx = OperationContext {
-                exec: &*conn,
+                exec: &guard,
                 cancel: &cancel,
                 observed_at,
             };
@@ -222,6 +225,18 @@ mod tests {
             if args.get("big").is_some() {
                 return Ok(serde_json::json!("x".repeat(MAX_RESULT_BYTES)));
             }
+            if args.get("root").is_some() {
+                let spec = ossiframe_core::CommandSpec::privileged(
+                    "/usr/bin/true",
+                    &[],
+                    std::time::Duration::from_secs(5),
+                )
+                .unwrap();
+                ctx.exec
+                    .run(&spec, ctx.cancel)
+                    .await
+                    .map_err(OperationError::Exec)?;
+            }
             if args.get("bad").is_some() {
                 return Err(OperationError::InvalidArguments("nope".into()));
             }
@@ -229,7 +244,10 @@ mod tests {
         }
     }
 
-    struct FakeConnector;
+    #[derive(Default)]
+    struct FakeConnector {
+        conn: Arc<FakeConn>,
+    }
 
     #[async_trait]
     impl Connector for FakeConnector {
@@ -239,15 +257,28 @@ mod tests {
             _: &AuthMethod,
             _: Option<PinnedHostKey>,
         ) -> Result<Arc<dyn Connection>, ConnectError> {
-            Ok(Arc::new(FakeConn::default()))
+            Ok(self.conn.clone())
         }
     }
 
     fn setup() -> (ServerService, Registry, Arc<AtomicUsize>, String) {
+        let (svc, reg, calls, id, _) = setup_with_conn();
+        (svc, reg, calls, id)
+    }
+
+    fn setup_with_conn() -> (
+        ServerService,
+        Registry,
+        Arc<AtomicUsize>,
+        String,
+        Arc<FakeConn>,
+    ) {
+        let connector = FakeConnector::default();
+        let conn = connector.conn.clone();
         let svc = ServerService::new(
             Store::open_in_memory().unwrap(),
             Arc::new(MemoryVault::default()),
-            Arc::new(FakeConnector),
+            Arc::new(connector),
             Arc::new(NoEvents),
         );
         let id = svc
@@ -268,7 +299,7 @@ mod tests {
             })
             .build()
             .unwrap();
-        (svc, registry, calls, id)
+        (svc, registry, calls, id, conn)
     }
 
     fn null() -> serde_json::Value {
@@ -348,6 +379,29 @@ mod tests {
             }
         );
         assert_eq!(calls.load(Ordering::SeqCst), 3);
+    }
+
+    #[tokio::test]
+    async fn privileged_command_is_denied_and_never_reaches_the_connection() {
+        let (svc, reg, _, id, conn) = setup_with_conn();
+        svc.connect(&id, None, false).await.unwrap();
+        let err = run_operation(
+            &svc,
+            &reg,
+            &id,
+            "probe",
+            "ping",
+            serde_json::json!({"root": 1}),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(
+            err,
+            IpcError::OperationFailed {
+                message: crate::ipc::PRIVILEGE_DENIED_MESSAGE.into()
+            }
+        );
+        assert_eq!(conn.runs.load(Ordering::SeqCst), 0);
     }
 
     #[test]

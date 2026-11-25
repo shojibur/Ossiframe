@@ -14,6 +14,7 @@ fn main() {
         "cancel_operation",
         "run_operation",
         "list_modules",
+        {{provision_build_names}}
     ];
     tauri_build::try_build(
         tauri_build::Attributes::new()

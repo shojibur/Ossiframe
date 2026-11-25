@@ -36,7 +36,8 @@ Flags of `new`:
 |---|---|
 | `--name` | Product name, 1 to 64 chars, starts with a letter (`A-Z a-z 0-9 space _ -`). |
 | `--identifier` | Reverse-DNS id such as `dev.example.acme`. Lowercase segments. `dev.ossiframe.*` is refused unless `--allow-ossiframe-namespace`. |
-| `--modules a,b` | Optional modules (comma separated). Today: `linux-inventory`, `linux-audit` (see [Module catalog](#module-catalog)). Required dependencies are added automatically. Default is none. |
+| `--modules a,b` | Optional modules (comma separated). Today: `linux-inventory`, `linux-audit`, and `ubuntu-provisioning` with `--enable-provisioning` (see [Module catalog](#module-catalog)). Required dependencies are added automatically. Default is none. |
+| `--enable-provisioning` | Required to include `ubuntu-provisioning`, and valid only together with it. Off by default. |
 | `--with-example-module` | Copies the example `ports` module into `<dir>/modules/ports/`. |
 | `--rev <40-hex>` | Ossiframe commit to pin. Default: `HEAD` of this checkout. |
 | `--ossiframe-local <path>` | Use path dependencies on a local Ossiframe checkout. Cannot be combined with `--rev`. |
@@ -45,15 +46,28 @@ Invalid input stops with a one-line error and writes nothing.
 
 ## Module catalog
 
-All operations are read-only, take no arguments (pass `null`; anything else is rejected) and use predefined commands without `sudo`.
+The `linux-inventory`, `linux-audit` and `ports` operations are read-only, take no arguments (pass `null`; anything else is rejected) and use predefined commands without `sudo`. `ubuntu-provisioning` is different: see below.
 
 | Module | Depends on | Operations |
 |---|---|---|
 | `linux-inventory` | none | `server-info` (hostname, OS, kernel, CPU, memory, root disk), `services` (systemd services and their state), `listening-sockets` (TCP/UDP listeners with binding class and visible process), `software` (server software known to the dpkg database). Includes a UI page. |
 | `linux-audit` | `linux-inventory` | Eight steps, in scan order: `resources`, `services`, `network`, `software`, `ssh`, `firewall`, `updates`, `certificates`. No UI page. |
+| `ubuntu-provisioning` | `linux-inventory` | Installs a base stack (Git, NGINX, PHP 8.3 CLI and FPM, Composer, MySQL, optional Redis) from the Ubuntu 24.04 archive through preflight, plan and approval. It runs commands as root through `sudo -n`. It registers no `run_operation` operations; the app uses the `provision_*` commands. Has UI pages in `modules/ubuntu-provisioning/ui/`. Live behaviour is pending verification. |
 | `ports` (example, `--with-example-module`) | none | The simple third-party example copied into your app. It is not part of the catalog; use it as the model for your own module. |
 
 Selecting `linux-audit` adds `linux-inventory` to the generated app automatically, ordered before it.
+
+### Provisioning is opt-in
+
+`ubuntu-provisioning` runs commands as root on servers, so the generator refuses it unless you pass `--enable-provisioning`, and refuses the flag without the module:
+
+```sh
+cargo run -p ossiframe-cli -- new ../acme-deploy \
+  --name "Acme Deploy" --identifier dev.example.acme-deploy \
+  --modules ubuntu-provisioning --enable-provisioning
+```
+
+With the flag, the generated app enables the `ossiframe-desktop` `provisioning` feature, registers the module, calls `provisioning::setup` and lists the ten `provision_*` commands in its handler, build manifest and capability file. Without the flag (the default, including the plain starter) none of that is generated and the app stays read-only: it has no `provision_*` command, and `run_operation` rejects `Privilege::Root` commands. Doctor never includes provisioning. See [security.md](security.md) for the limits of these guards.
 
 ### Use `linux-audit` in your app
 
@@ -110,7 +124,7 @@ No change to Core is needed. The `ports` example in `examples/custom-module/` is
 ## Security notes
 
 - Modules are trusted compile-time code. A module manifest is not a sandbox.
-- All operations in this version are read-only. Before any mutating or privileged operation is added, explicit authorization and approval boundaries must be added (planned for S04).
+- Modules built with the default starter are read-only: `run_operation` hands them an executor that rejects `Privilege::Root`. That guard checks the privilege field only; it is not a sandbox and does not stop a user-level command from changing a server. Mutating work belongs in the plan, approval and operation engine enabled by `--enable-provisioning`, not in `run_operation`.
 - Secrets stay in the OS keychain. The frontend can run only operations registered in the app.
 
 ## Read more

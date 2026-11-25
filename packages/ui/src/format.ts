@@ -1,4 +1,4 @@
-import type { IpcError } from "@ossiframe/client";
+import type { IpcError, PlanReason } from "@ossiframe/client";
 
 export function gib(bytes: number): string {
   return `${(bytes / 1024 ** 3).toFixed(1)} GiB`;
@@ -27,6 +27,33 @@ export function localTime(iso: string): string {
 }
 
 const MAY_STILL_RUN = "The remote command may still be running on the server. It was not retried.";
+
+/** `detail` is the backend's short sanitized text and may add specifics. */
+function planMessage(reason: PlanReason, detail: string): string {
+  const more = detail ? ` ${detail}` : "";
+  switch (reason) {
+    case "unknownPlan":
+      return "This plan no longer exists. Plans are kept in memory only and each can be approved once. Create a new plan.";
+    case "superseded":
+      return "A newer plan was created for this server. Review and approve the newest plan.";
+    case "expired":
+      return "The plan expired. Nothing was changed on the server. Create a new plan.";
+    case "mismatch":
+      return `The request no longer matches what was reviewed (plan content or lock holder). Nothing was changed by this request.${more}`;
+    case "wrongServer":
+      return `The connected server does not match the one this plan was made for. Nothing was changed.${more}`;
+    case "busy":
+      return `Another operation holds this server.${more}`;
+    case "serverInUse":
+      return "This server has an operation that is running or needs review. Resolve it first, then retry.";
+    case "blocked":
+      return `This cannot go ahead because of a blocking finding.${more}`;
+    case "rePlanRequired":
+      return `The server changed after the plan was made. Nothing was changed. Create a new plan.${more}`;
+    case "notSupported":
+      return `This is not supported.${more}`;
+  }
+}
 
 /** Plain-text message for an IPC error. */
 export function errorMessage(e: IpcError): string {
@@ -71,6 +98,8 @@ export function errorMessage(e: IpcError): string {
       return `SSH error: ${e.message}`;
     case "operationFailed":
       return `The operation failed: ${e.message}`;
+    case "plan":
+      return planMessage(e.reason, e.message);
     case "internal":
       return "Something went wrong.";
   }

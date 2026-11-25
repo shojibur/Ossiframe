@@ -26,12 +26,17 @@ S04 adds the first server mutations to Ossiframe: installing a base stack (Git, 
 - **Operation_State**: One of Pending, Running, Verifying, Succeeded, Failed, Cancelled, UnknownOutcome.
 - **Durable_Step**: A step run as a transient systemd unit named `ossiframe-op-<8 hex>-<idx>` through `systemd-run`.
 - **Reconcile**: Read-only resolution of an UnknownOutcome Operation.
-- **Provisioning_Commands**: The eight `provision_*` IPC commands.
+- **Provisioning_Commands**: The ten `provision_*` IPC commands.
+- **Remote_Lock**: The transient systemd unit `ossiframe-provision-lock`, held on the server for the whole mutation lifecycle of one Operation. Its description is the ownership record.
+- **Identity_Snapshot**: Server name, host, port, user and pinned host key SHA-256 captured in a Plan and in an Operation.
+- **Server_Class**: Preflight classification of a server as Fresh, ExistingUnmanaged, OssiframeManaged or Partial.
+- **Essential_Check**: A verification check whose Pass is required for its component to count as verified.
+- **Source_Allowlist**: The explicit list of official Ubuntu archive hosts permitted as APT sources.
 - **Doctor**: `apps/doctor`, the read-only application.
 - **Deploy**: `apps/deploy`, the new provisioning application.
 - **Generator**: `tools/ossiframe-cli`.
 - **Starter**: The template that Generator renders.
-- **Disposable_Server**: A fresh Ubuntu 24.04 instance with 2 to 4 GB RAM that the user creates and names.
+- **Disposable_Server**: A fresh Ubuntu 24.04 instance (about 2 vCPU, 4 GB RAM) that the user creates and names.
 - **Verification_Record**: `docs/verification/s04-infrastructure-provisioning.md`.
 
 ## Requirements
@@ -45,7 +50,7 @@ S04 adds the first server mutations to Ossiframe: installing a base stack (Git, 
 1. THE CommandSpec SHALL carry a Privilege, and `CommandSpec::new` SHALL produce Privilege `User`.
 2. WHEN `CommandSpec::privileged` is called with an absolute program path, THE CommandSpec SHALL be created with Privilege `Root`.
 3. IF `CommandSpec::privileged` is called with a program path that is not absolute, THEN THE CommandSpec SHALL return a ValidationError.
-4. WHEN a CommandSpec with Privilege `Root` is rendered, THE CommandSpec SHALL produce a command line that starts with `'sudo' '-n' '--'` followed by individually quoted program and arguments.
+4. WHEN a CommandSpec with Privilege `Root` is rendered, THE CommandSpec SHALL produce a command line that starts with `'/usr/bin/sudo' '-n' '--'` (fixed sudo path) followed by individually quoted program and arguments.
 5. WHEN a CommandSpec with Privilege `User` is rendered, THE CommandSpec SHALL produce a command line without a `sudo` prefix.
 6. WHEN a hostile argument is passed to a privileged CommandSpec, THE CommandSpec SHALL render it as one quoted word.
 
@@ -55,7 +60,7 @@ S04 adds the first server mutations to Ossiframe: installing a base stack (Git, 
 
 #### Acceptance Criteria
 
-1. THE Preflight SHALL run the fixed probe `sudo -n -- /usr/bin/true` and classify the result as Passwordless, PasswordRequired, NotPermitted or Unavailable.
+1. THE Preflight SHALL run the fixed probe `/usr/bin/sudo -n -- /usr/bin/true` and classify the result as Passwordless, PasswordRequired, NotPermitted or Unavailable.
 2. THE Preflight SHALL decide the classification from the exit code, and use English stderr text only as a hint for the message.
 3. IF the sudo classification is not Passwordless, THEN THE Preflight_Report SHALL contain a Blocker that states that passwordless `sudo -n` is required.
 4. WHEN `sudo -n` fails, THE Executor SHALL return without prompting for a password.
@@ -74,6 +79,8 @@ S04 adds the first server mutations to Ossiframe: installing a base stack (Git, 
 3. WHEN a CommandSpec with Privilege `User` is submitted to the ReadOnly_Guard, THE ReadOnly_Guard SHALL pass it to the wrapped Executor.
 4. THE Ubuntu_Provisioning_Module SHALL register with zero `OperationInfo` entries.
 5. THE S04 change SHALL leave the `Module` and `OperationInfo` types unchanged.
+6. THE ReadOnly_Guard SHALL check only the Privilege field and SHALL NOT classify commands. S04 documentation SHALL NOT claim that the guard prevents all user-level mutation or prevents trusted Rust code from invoking sudo through its own executor.
+7. THE Doctor read-only behavior SHALL derive from its registered modules with predefined read-only commands, the restricted typed IPC surface, and the absence of provisioning registration and setup, and SHALL be verified by command-list drift tests.
 
 ### Requirement 4: Privileged path only through approved plans
 
@@ -83,12 +90,12 @@ S04 adds the first server mutations to Ossiframe: installing a base stack (Git, 
 
 1. THE Engine SHALL execute privileged steps only from an Approved_Plan.
 2. THE Plan_Store SHALL be the only code path that constructs an Approved_Plan.
-3. THE Provisioning_Commands SHALL accept only server ids, component ids, plan ids, operation ids, a limit and a Plan_Digest, and SHALL accept no program, argv, path or privilege value.
+3. THE Provisioning_Commands SHALL accept only server ids, component ids, plan ids, operation ids, a limit and a Plan_Digest, and SHALL accept no program, argv, path, privilege value or plan contents.
 4. WHEN a Provisioning_Command receives an input, THE Engine SHALL validate ids as UUIDs, component ids as module-style identifiers and the Plan_Digest as 64 lowercase hex characters before use.
 5. THE Provisioning_Commands SHALL exist only when `ossiframe-desktop` is built with features `tauri` and `provisioning`.
 6. THE Provisioning_Commands SHALL have state only in an app that calls `provisioning::setup` with a Provisioner.
 7. THE `tauri_support::setup` function and `AppSetup` SHALL remain unchanged so that Doctor and the Starter compile without the feature.
-8. THE preflight sudo probe SHALL be the only privileged command executed outside an Approved_Plan.
+8. THE preflight sudo probe SHALL be the only privileged command executed before approval. Privileged commands after approval (steps, Remote_Lock, journal reads, reconcile and resolution evidence reads, verification) SHALL be tied to an Operation created from an Approved_Plan and SHALL use fixed argv.
 
 ### Requirement 5: Doctor remains read-only
 
@@ -114,6 +121,8 @@ S04 adds the first server mutations to Ossiframe: installing a base stack (Git, 
 4. WHEN a Conflict has severity Blocker, THE Preflight_Report SHALL set `canProvision` to false.
 5. THE Preflight SHALL run no privileged command other than the sudo probe.
 6. IF the preflight is cancelled or the connection drops, THEN THE Engine SHALL return an OperationError and SHALL create no Plan.
+7. THE Preflight SHALL classify the server as Fresh, ExistingUnmanaged, OssiframeManaged (only when the Store holds a Succeeded Operation with no failed Essential_Check for the same Identity_Snapshot endpoint and pinned host key) or Partial (an earlier Failed, Cancelled or closed Operation for that identity). Package presence, file names or unit names SHALL NOT establish OssiframeManaged.
+8. IF evidence needed for a Blocker rule is unavailable, incomplete (timeout or parse failure) or truncated at a cap, THEN THE Preflight_Report SHALL contain a Blocker for that rule.
 
 ### Requirement 7: Preflight blocking rules
 
@@ -127,14 +136,14 @@ S04 adds the first server mutations to Ossiframe: installing a base stack (Git, 
 4. IF RAM is below 900 MB and `mysql` is selected, THEN THE Preflight_Report SHALL contain a Blocker.
 5. IF RAM is below 1.8 GB and `mysql` is selected, THEN THE Preflight_Report SHALL contain a Warning.
 6. IF free disk on `/` is below the estimated need plus 1 GB, THEN THE Preflight_Report SHALL contain a Blocker.
-7. IF `dpkg --audit` prints output, or a planned package has a dpkg state other than absent or `ii`, THEN THE Preflight_Report SHALL contain a Blocker.
+7. IF any package on the server is half-installed, unpacked, half-configured, triggers-awaited, triggers-pending or reinstall-required in the unprivileged `dpkg-query` listing (installed, not-installed and config-files states are fine), or a planned package has a dpkg state other than absent or `ii`, THEN THE Preflight_Report SHALL contain a Blocker.
 8. IF `apache2`, `mariadb-server` or `postgresql` is installed or active, or a PHP version other than 8.3 is installed, THEN THE Preflight_Report SHALL contain a Blocker.
 9. IF an Apache site exists, or an NGINX entry other than `default` and names starting with `ossiframe-` exists, THEN THE Preflight_Report SHALL contain a Blocker.
-10. IF ports 80, 443, 3306, 33060 or 6379 are held by a process that does not belong to a selected component, THEN THE Preflight_Report SHALL contain a Blocker.
-11. IF an `ossiframe-op-*` systemd unit exists, THEN THE Preflight_Report SHALL contain a Blocker.
+10. IF ports 80, 443, 3306, 33060 or 6379 are held by a process that does not belong to a selected component, or by a process whose owner cannot be determined, THEN THE Preflight_Report SHALL contain a Blocker. Unknown ownership SHALL NOT count as ownership by the selected component.
+11. IF an `ossiframe-op-*` unit or the Remote_Lock unit exists, THEN THE Preflight_Report SHALL contain a Blocker with the owner details when readable. The unit scan SHALL be advisory, and the Remote_Lock SHALL be authoritative.
 12. IF apt or dpkg activity, a pending reboot, or a missing package candidate before `apt-get update` is observed, THEN THE Preflight_Report SHALL contain a Warning.
-13. WHEN a package was installed by an earlier Ossiframe run, THE Preflight SHALL list it as already present and SHALL NOT report a Conflict for it.
-14. THE Preflight SHALL provide no adoption path for existing servers.
+13. WHEN the Server_Class is OssiframeManaged or Partial, THE Preflight SHALL list planned packages already installed as already present and SHALL NOT report a Conflict for them. Partial SHALL yield a Warning and allow planning only when dpkg is healthy.
+14. IF the Server_Class is ExistingUnmanaged (a service-bearing package, a non-default site or a listener on a managed port without an Ossiframe record), THEN THE Preflight_Report SHALL contain a Blocker, and THE Preflight SHALL provide no adoption path. Components without services or configuration (`git`, `composer`) MAY be preinstalled and SHALL NOT alone make a server ExistingUnmanaged.
 
 ### Requirement 8: Ubuntu provisioning module and components
 
@@ -160,15 +169,15 @@ S04 adds the first server mutations to Ossiframe: installing a base stack (Git, 
 
 #### Acceptance Criteria
 
-1. THE Plan SHALL contain the target (server id, `user@host:port`, pinned host key SHA-256), OS, resolved components, already-present components, packages with installed versions, files, services, resources, privileges, limitations, steps and preconditions.
+1. THE Plan SHALL contain the target as an Identity_Snapshot (server id, name, host, port, user, pinned host key SHA-256), OS, resolved components, already-present components, packages with installed versions, files, services, resources, privileges, limitations, steps and preconditions.
 2. WHEN a Plan is built, THE Ubuntu_Provisioning_Module SHALL omit packages already installed and sort the remaining packages.
-3. WHEN at least one package is missing, THE Ubuntu_Provisioning_Module SHALL emit the durable steps `apt-update` and `apt-install`.
+3. WHEN at least one package is missing, THE Ubuntu_Provisioning_Module SHALL emit the durable step `apt-update`, the gate step `candidate-check` and the durable step `apt-install`, in that order.
 4. THE `apt-install` step SHALL run `/usr/bin/apt-get install -y --no-install-recommends -o DPkg::Lock::Timeout=300` with the missing packages.
 5. THE Plan SHALL list `apt-get update` as a visible step that the user approves.
 6. IF every selected package is installed, THEN THE Ubuntu_Provisioning_Module SHALL produce a Plan with zero steps that results in a verify-only Operation.
 7. IF the Preflight_Report contains a Blocker, THEN THE Ubuntu_Provisioning_Module SHALL refuse to build a Plan.
 8. THE Plan SHALL contain an empty files list in S04.
-9. THE Plan limitations SHALL state that no rollback exists, that a failed install can leave partial packages, that services start automatically, that no firewall change is made, and that the default NGINX page is reachable when port 80 is open.
+9. THE Plan limitations SHALL state that no rollback exists, that a failed install can leave partial packages, that services start automatically and package scripts may restart services, that APT may install additional dependencies and run maintainer scripts, that no firewall change is made, that Ossiframe never runs `dpkg --configure -a`, removes packages or terminates apt or dpkg, and that the default NGINX page is reachable when port 80 is open.
 10. THE Plan SHALL serialize to deterministic JSON with only ordered collections.
 11. FOR ALL equal Preflight_Reports and selections, THE Ubuntu_Provisioning_Module SHALL produce Plans with equal Plan_Digests.
 
@@ -184,10 +193,11 @@ S04 adds the first server mutations to Ossiframe: installing a base stack (Git, 
 4. WHEN `provision_approve_plan` is called, THE Engine SHALL check, in order, the plan exists, the plan id matches, the plan is not expired, the submitted Plan_Digest equals the stored and the recomputed Plan_Digest, the server record and pinned host key equal the Plan target, the server is connected, and no other Operation is active or UnknownOutcome for the server.
 5. IF a check in criterion 4 fails, THEN THE Engine SHALL return a `plan` error with the matching reason (`unknownPlan`, `superseded`, `expired`, `mismatch`, `wrongServer`, `busy`) and SHALL execute nothing.
 6. WHEN approval checks pass, THE Engine SHALL call `Provisioner::recheck` before creating the Operation.
-7. IF `Provisioner::recheck` reports drift in OS version, planned package states, blockers, free disk, sudo mode or the NGINX site list, THEN THE Engine SHALL return `rePlanRequired` with the reasons and SHALL execute nothing.
-8. THE recheck SHALL NOT treat memory, uptime or apt activity as drift.
+7. IF `Provisioner::recheck` reports drift in OS version, planned package states, blockers, sudo mode, the NGINX site list or package sources, THEN THE Engine SHALL return `rePlanRequired` with the reasons and SHALL execute nothing.
+8. THE recheck SHALL re-evaluate total RAM and free disk against the Plan resource needs and report drift when either is below its minimum, and SHALL NOT treat uptime, apt activity or memory above the minimum as drift.
 9. WHEN a plan is read back from SQLite, THE Engine SHALL verify its Plan_Digest.
-10. THE Engine SHALL execute only the stored Plan, never a Plan supplied by the frontend.
+10. THE Engine SHALL execute only the stored Plan, never a Plan or commands supplied by the frontend.
+11. WHEN recheck reports no drift, THE Engine SHALL acquire the Remote_Lock before creating the Operation, and IF acquisition fails, THEN THE Engine SHALL return `busy` with the owner details and execute nothing.
 
 ### Requirement 11: Operation records and states
 
@@ -201,8 +211,9 @@ S04 adds the first server mutations to Ossiframe: installing a base stack (Git, 
 4. THE Engine SHALL reject a new Plan for a server that has an Operation in Pending, Running, Verifying or UnknownOutcome.
 5. WHEN the application starts, THE Engine SHALL mark every Operation in Pending, Running or Verifying as UnknownOutcome.
 6. WHEN an Operation changes state or refreshes output, THE Engine SHALL write the change to SQLite and emit `operation-updated` through the `OperationEvents` trait.
-7. WHEN a server profile is deleted, THE Store SHALL cascade-delete its Operations and steps.
-8. WHEN a server is removed during an Operation, THE Engine SHALL stop without further writes.
+7. WHEN a server profile is deleted, THE Store SHALL keep its Operations, steps and events, set the server reference to null and retain the Identity_Snapshot.
+8. THE Engine SHALL persist every state transition and every remote unit id as an operation event, bounded to 200 events per Operation.
+9. THE Store SHALL keep a random installation id, used as the desktop identity in the Remote_Lock ownership record.
 
 ### Requirement 12: Durable execution
 
@@ -210,7 +221,7 @@ S04 adds the first server mutations to Ossiframe: installing a base stack (Git, 
 
 #### Acceptance Criteria
 
-1. WHEN a Durable_Step starts, THE Engine SHALL persist the step with its unit name and status Running before launching it.
+1. WHEN a Durable_Step starts, THE Engine SHALL persist the step with its unit name (`ossiframe-op-<full operation UUID>-<step index>`) and status Running before launching it.
 2. THE Engine SHALL launch a Durable_Step with `/usr/bin/systemd-run --unit=<name> --service-type=exec --remain-after-exit --quiet`, `DEBIAN_FRONTEND=noninteractive` and `NEEDRESTART_SUSPEND=1`.
 3. WHILE a Durable_Step runs, THE Engine SHALL poll `systemctl show` every 3 seconds for LoadState, ActiveState, SubState, Result and ExecMainStatus.
 4. WHEN `Result=success` and `ExecMainStatus=0`, THE Engine SHALL mark the step succeeded.
@@ -219,9 +230,11 @@ S04 adds the first server mutations to Ossiframe: installing a base stack (Git, 
 7. IF a poll times out, THEN THE Engine SHALL retry the poll up to 3 consecutive times and then set the Operation to UnknownOutcome.
 8. IF the connection drops, a step deadline passes, a launch times out or the application crashes during a step, THEN THE Engine SHALL set the Operation to UnknownOutcome and SHALL NOT relaunch the step.
 9. THE Engine SHALL NOT retry any mutating command automatically.
-10. THE Engine SHALL NOT stop, kill or signal apt, dpkg or a Durable_Step unit while a step runs.
-11. WHEN a step finishes, THE Engine SHALL attempt `systemctl stop` and `reset-failed` on the unit and SHALL treat their failure as non-fatal.
+10. THE Engine SHALL NOT stop, kill or signal apt, dpkg or any unit that may still run them.
+11. WHEN a step reaches a terminal state, THE Engine SHALL first persist the terminal step result (exit status, end time, bounded log), and only then clean up a unit confirmed finished (`reset-failed` for a failed unit, `systemctl stop` for an `active/exited` unit with no running process). Cleanup failure SHALL be non-fatal.
 12. IF a foreground step exits non-zero, THEN THE Engine SHALL mark the step and the Operation Failed.
+13. IF a client-side deadline passes or the user cancels while a step runs, THEN THE Engine SHALL stop waiting, report that the step may still be running, and SHALL NOT terminate apt, dpkg or the unit.
+14. WHEN a gate step runs, THE Engine SHALL call `Provisioner::gate`, and IF it fails, THEN THE Engine SHALL fail the Operation before the next step.
 
 ### Requirement 13: Output handling
 
@@ -232,9 +245,11 @@ S04 adds the first server mutations to Ossiframe: installing a base stack (Git, 
 1. THE Engine SHALL store step output as the last 200 journal lines, redacted, valid UTF-8 and capped at 64 KiB per step.
 2. WHILE a Durable_Step runs, THE Engine SHALL refresh the stored journal output every 15 seconds and once at completion.
 3. THE Engine SHALL cap the Operation `error` text with `ipc::cap`.
-4. THE Engine SHALL send only redacted and capped output over IPC.
+4. THE Engine SHALL apply best-effort redaction of known secret patterns and a cap to output sent over IPC. S04 sends no secret to a server, and the documentation SHALL NOT claim universal redaction.
 5. THE Engine SHALL write no raw SSH output to logs.
-6. THE Deploy UI SHALL render remote output as text.
+6. THE Deploy UI SHALL render remote output as plain text.
+7. THE Engine SHALL reuse the existing polling and event mechanism and SHALL add no streaming infrastructure.
+8. THE Engine SHALL bound stored output and events so that a long or noisy operation cannot grow the database without limit.
 
 ### Requirement 14: Cancellation
 
@@ -253,13 +268,15 @@ S04 adds the first server mutations to Ossiframe: installing a base stack (Git, 
 
 #### Acceptance Criteria
 
-1. WHEN `provision_reconcile` is called for an UnknownOutcome Operation, THE Engine SHALL run only read-only queries (`systemctl show` on the recorded unit and `dpkg-query` on the plan packages).
+1. WHEN `provision_reconcile` is called for an UnknownOutcome Operation, THE Engine SHALL collect evidence with read-only queries only: the recorded step history, the state of the recorded unit when present, dpkg package-state health from the unprivileged `dpkg-query` listing, apt and dpkg processes and lock holders, `dpkg-query` on the plan packages, service state, and verification checks.
 2. WHILE the recorded unit is still active, THE Engine SHALL keep the Operation in UnknownOutcome and report that the step is still running.
-3. WHEN the unit finished successfully and all steps are accounted for, THE Engine SHALL set the Operation to Verifying and then to Succeeded or Failed.
+3. WHEN the unit finished successfully, THE Engine SHALL record that step as completed, and WHEN all steps are completed, THE Engine SHALL set the Operation to Verifying. A completed step SHALL NOT imply plan success, and a completed `apt-update` SHALL NOT imply that `apt-install` ran.
 4. WHEN the unit finished with a failure, THE Engine SHALL set the Operation to Failed with the capped journal tail.
-5. IF the unit is not found, THEN THE Engine SHALL set the Operation to Failed with the message "no remote activity found".
-6. THE Engine SHALL NOT launch any step during Reconcile.
-7. THE Engine SHALL NOT resume a half-finished Plan, and recovery SHALL require a fresh preflight and a new Plan.
+5. IF the recorded unit is missing, THEN THE Engine SHALL NOT conclude that the step never ran and SHALL NOT set Failed on that fact alone. For a launched `apt-install` step it SHALL use the other evidence, and WHEN dpkg is healthy, no apt or dpkg process exists and every plan package is installed, it SHALL set Verifying.
+6. IF the evidence is inconclusive or cannot be collected, THEN THE Engine SHALL keep the Operation in UnknownOutcome, list the evidence and show actionable recovery text.
+7. IF the local step record shows that a step was never launched and all earlier steps are terminal, THEN THE Engine SHALL set Failed with the message "interrupted before step N".
+8. THE Engine SHALL NOT launch, resume, stop, kill or signal anything during Reconcile.
+9. THE Engine SHALL NOT resume a half-finished Plan, and recovery SHALL require a fresh preflight and a new Plan.
 
 ### Requirement 16: No configuration writes in S04
 
@@ -267,7 +284,7 @@ S04 adds the first server mutations to Ossiframe: installing a base stack (Git, 
 
 #### Acceptance Criteria
 
-1. THE Engine SHALL write no file on the server in S04.
+1. THE Engine SHALL write no file on the server in S04. The Remote_Lock is a transient systemd unit, not a file.
 2. THE `CommandSpec` SHALL gain no stdin field in S04.
 3. THE S04 change SHALL leave NGINX, PHP-FPM, MySQL and Redis on distro default configuration.
 4. THE S04 deliverables SHALL include no backup, validate, reload or restore primitive for configuration files.
@@ -280,18 +297,20 @@ S04 adds the first server mutations to Ossiframe: installing a base stack (Git, 
 #### Acceptance Criteria
 
 1. WHEN all steps finish, THE Engine SHALL set the Operation to Verifying and call `Provisioner::verify`.
-2. THE Provisioner SHALL return a CheckResult with status Pass, Fail, Warn or Skipped for each check, with detail capped at 200 characters.
-3. THE Provisioner SHALL check, for every selected component, that each package has dpkg status `ii`.
-4. WHERE `nginx` is selected, THE Provisioner SHALL check the version, active unit, `nginx -t`, and an HTTP request to `http://127.0.0.1/` when `curl` exists, with HTTP 200 as Pass, another code as Warn and a connection failure as Fail.
-5. WHERE `php` is selected, THE Provisioner SHALL check that `php -v` reports 8.3 and that the required module list is present.
-6. WHERE `php-fpm` is selected, THE Provisioner SHALL check the version, active unit, `php-fpm8.3 -t`, the socket `/run/php/php8.3-fpm.sock` and the module list.
-7. WHERE `composer` is selected, THE Provisioner SHALL check that `composer --version` starts with `Composer version 2.`.
-8. WHERE `mysql` is selected, THE Provisioner SHALL check the active unit, the version, loopback-only binding of ports 3306 and 33060, and `SELECT 1` through `auth_socket`.
-9. WHERE `redis` is selected, THE Provisioner SHALL check the active unit, the version, loopback-only binding of port 6379 and a `PONG` reply.
-10. WHERE `git` is selected, THE Provisioner SHALL check that `git --version` succeeds.
-11. IF any CheckResult has status Fail, THEN THE Engine SHALL set the Operation to Failed.
-12. WHEN no CheckResult has status Fail, THE Engine SHALL set the Operation to Succeeded.
-13. THE Engine SHALL persist the CheckResults in `operations.verification_json`.
+2. THE Provisioner SHALL return a CheckResult with an `essential` flag and status Pass, Fail, Warn or Skipped for each check, with detail capped at 200 characters, and SHALL NOT compute scores.
+3. THE Provisioner SHALL treat a component as verified only when all its Essential_Checks have status Pass. A Fail, Skipped or unavailable Essential_Check SHALL make the component not verified. A non-passing optional check SHALL yield Warn or Skipped and a recorded limitation without failing the component.
+4. THE Provisioner SHALL treat, for every selected component, dpkg status `ii` of each package as an Essential_Check.
+5. WHERE `nginx` is selected, THE Provisioner SHALL treat the active unit and `nginx -t` as Essential_Checks. WHEN `curl` exists, it SHALL run `curl -sS --max-time 5 -o /dev/null -w '%{http_code}' http://127.0.0.1/` as an Essential_Check that passes on any returned HTTP status (recorded) and fails on a connection failure or timeout. WHEN `curl` is absent, it SHALL mark that check Skipped and non-essential with a recorded limitation.
+6. WHERE `php` is selected, THE Provisioner SHALL treat `php -v` reporting 8.3 and the required modules in `php -m` as Essential_Checks.
+7. WHERE `php-fpm` is selected, THE Provisioner SHALL treat the active unit, the socket `/run/php/php8.3-fpm.sock`, `php-fpm8.3 -t` and the required modules in `php-fpm8.3 -m` as Essential_Checks.
+8. WHERE `composer` or `git` is selected, THE Provisioner SHALL treat a successful version command as an Essential_Check, and for Composer the output SHALL start with `Composer version 2.`.
+9. WHERE `mysql` is selected, THE Provisioner SHALL treat the active unit, a local connection through `sudo -n /usr/bin/mysql --no-defaults -N -B -e 'SELECT 1'` over `auth_socket`, and loopback-only binding of ports 3306 and 33060 as Essential_Checks. An unreadable socket listing SHALL be a Fail.
+10. WHERE `redis` is selected, THE Provisioner SHALL treat the active unit, loopback-only binding of port 6379 and a `PONG` reply as Essential_Checks.
+11. THE Provisioner SHALL treat service version output of nginx, mysqld and redis as optional checks.
+12. THE Provisioner SHALL run only `nginx -t`, `php-fpm8.3 -t` and `mysql` privileged, and only inside the approved Operation.
+13. THE Engine SHALL persist the CheckResults and component verdicts in `operations.verification_json`.
+14. IF any selected component is not verified, THEN THE Engine SHALL set the Operation to Failed.
+15. WHEN every selected component is verified, THE Engine SHALL set the Operation to Succeeded.
 
 ### Requirement 18: IPC surface
 
@@ -299,9 +318,9 @@ S04 adds the first server mutations to Ossiframe: installing a base stack (Git, 
 
 #### Acceptance Criteria
 
-1. THE Provisioning_Commands SHALL be `provision_components`, `provision_preflight`, `provision_create_plan`, `provision_approve_plan`, `provision_cancel`, `provision_reconcile`, `provision_get_operation` and `provision_list_operations`.
+1. THE Provisioning_Commands SHALL be `provision_components`, `provision_preflight`, `provision_create_plan`, `provision_approve_plan`, `provision_cancel`, `provision_reconcile`, `provision_mark_resolved`, `provision_release_stale_lock`, `provision_get_operation` and `provision_list_operations`.
 2. WHEN `provision_list_operations` is called, THE Engine SHALL return at most 50 summaries.
-3. THE IpcError SHALL contain a `plan` variant with reasons `unknownPlan`, `superseded`, `expired`, `mismatch`, `wrongServer`, `busy`, `blocked`, `rePlanRequired` and `notSupported`.
+3. THE IpcError SHALL contain a `plan` variant with reasons `unknownPlan`, `superseded`, `expired`, `mismatch`, `wrongServer`, `busy`, `serverInUse`, `blocked`, `rePlanRequired` and `notSupported`.
 4. THE TypeScript error `KINDS` set in `@ossiframe/client` SHALL include the `plan` kind.
 5. THE `@ossiframe/client` package SHALL export the provisioning wrappers from `provisioning.ts` separately from `api`.
 6. THE Provisioning_Commands SHALL return typed DTOs and SHALL expose no generic shell, file or command-output channel.
@@ -318,13 +337,15 @@ S04 adds the first server mutations to Ossiframe: installing a base stack (Git, 
 4. THE Deploy capability file SHALL contain no `dialog:` or `fs:` permissions.
 5. THE Deploy UI SHALL provide the tabs Overview, Preflight, Software, Plan, Operation and History through `ServerWorkspace`.
 6. THE Software tab SHALL list components with installed state and checkboxes, apply the default selection and leave `redis` unchecked.
-7. THE Plan tab SHALL show packages, services, steps, resources, privileges, limitations, the full Plan_Digest and the expiry countdown.
-8. WHILE the Plan is unexpired and the user has typed the first 8 hex characters of the Plan_Digest, THE Plan tab SHALL enable the approve button.
-9. WHILE an Operation is in UnknownOutcome, THE Operation tab SHALL show a Reconcile button and state that nothing is retried automatically.
+7. THE Plan tab SHALL show packages, services, steps, resources, privileges, limitations and the expiry countdown, and SHALL show the Plan_Digest in a technical-details section and in history.
+8. WHEN the user starts approval of an unexpired Plan, THE Deploy UI SHALL show a confirmation dialog that lists the target server (Identity_Snapshot), selected components, packages to install, expected service changes, the root privilege requirement, resource requirements, recovery limitations, and that APT may install additional dependencies and run maintainer scripts, and SHALL require an explicit approve action for that Plan. THE Deploy UI SHALL NOT require typing any part of the Plan_Digest.
+9. WHILE an Operation is in UnknownOutcome, THE Operation tab SHALL show Reconcile and "Mark resolved after inspection" actions, the collected evidence, and a statement that nothing is retried automatically.
 10. THE Deploy UI SHALL show the sudo requirement and that passwordless sudo is root-equivalent.
 11. THE Deploy UI SHALL show no mock data.
 12. THE Deploy UI SHALL mutate nothing until a Plan is explicitly approved.
 13. THE page components SHALL be exported from `modules/ubuntu-provisioning/ui/`.
+14. THE Deploy UI SHALL state that the Plan_Digest does not protect against a compromised frontend. THE Deploy frontend SHALL submit only ids and the Plan_Digest and SHALL NOT submit commands or Plan contents.
+15. THE Deploy SHALL bind no server to a runtime, SHALL contain no Laravel functionality, and SHALL allow further components to be installed later through a new Plan.
 
 ### Requirement 20: Generator opt-in
 
@@ -334,9 +355,10 @@ S04 adds the first server mutations to Ossiframe: installing a base stack (Git, 
 
 1. THE Generator catalog SHALL mark `ubuntu-provisioning` as `privileged`.
 2. IF `new --modules ubuntu-provisioning` is used without `--enable-provisioning`, THEN THE Generator SHALL fail with a message that names the missing flag.
-3. WHEN `--enable-provisioning` is given, THE Generator SHALL add the `provisioning` feature, the `provisioning::setup` call, the eight commands in the handler, `build.rs` and capability, and the matching drift tests.
+3. WHEN `--enable-provisioning` is given, THE Generator SHALL add the `provisioning` feature, the `provisioning::setup` call, the ten commands in the handler, `build.rs` and capability, and the matching drift tests.
 4. WHEN `--enable-provisioning` is not given, THE Generator SHALL render the Starter without any Provisioning_Command, `provisioning` feature or provisioning module.
-5. THE Generator SHALL build an opt-in project generated outside the repository as part of verification.
+5. THE verification SHALL build an opt-in project generated outside the repository in local mode (path dependencies on the repository). Verification against a published revision SHALL wait until the user publishes.
+6. THE Generator SHALL preserve license notices in generated output.
 
 ### Requirement 21: Documentation
 
@@ -357,16 +379,18 @@ S04 adds the first server mutations to Ossiframe: installing a base stack (Git, 
 #### Acceptance Criteria
 
 1. THE Verification_Record SHALL contain only output from real runs, and SHALL state any check that could not be run.
-2. THE verification SHALL use only a Disposable_Server that the user creates and names, and the existing Doctor server for read-only preflight only.
+2. THE verification SHALL use only a Disposable_Server that the user creates and names, and the existing small Doctor server for read-only preflight only.
 3. THE verification SHALL create no cloud resource automatically.
-4. THE verification on the Doctor server SHALL run the preflight only and SHALL install nothing without explicit user approval.
-5. THE verification on the Disposable_Server SHALL run preflight, plan, approval, the default stack and every verification check, and SHALL record package versions.
+4. THE verification on the Doctor server SHALL run the preflight only and SHALL NOT provision or mutate it.
+5. BEFORE any mutation on the Disposable_Server, THE user SHALL confirm the host key fingerprint in the provider console and give explicit approval to provision that server. THE verification SHALL then run preflight, plan, approval, the default stack and every verification check, and SHALL record package versions.
 6. THE verification SHALL record the behavior of `systemd-run --remain-after-exit` on Ubuntu 24.04.
 7. THE verification SHALL run a second plan on the same server and record that it has zero install steps and only verifies.
 8. THE verification SHALL change server state between plan and approval and record `rePlanRequired`, wait out expiry and record the rejection, and alter the digest and record the rejection.
 9. THE verification SHALL interrupt the SSH connection or application during `apt-install` and record UnknownOutcome, the unit continuing, Reconcile resolution and no automatic retry.
 10. THE verification SHALL observe a fresh boot with unattended-upgrades holding the dpkg lock and record the `DPkg::Lock::Timeout` wait and the effect of `NEEDRESTART_SUSPEND=1`.
 11. THE verification SHALL run Doctor against the provisioned server and record that Doctor exposes no provisioning command.
+12. THE verification SHALL record the Remote_Lock behavior: a second acquisition attempt returns `busy` with owner details, the lock unit survives SSH loss and application exit, and stale handling requires an explicit user action.
+13. THE implementation tasks other than live verification SHALL NOT depend on the Disposable_Server, and S04 SHALL be reported as implemented with live verification pending until the live checks are done.
 
 ### Requirement 23: Quality gates and unit tests
 
@@ -380,10 +404,13 @@ S04 adds the first server mutations to Ossiframe: installing a base stack (Git, 
 4. THE S04 change SHALL include unit tests for Plan_Store expiry, supersede, digest mismatch, wrong server, single use and unknown plan.
 5. THE S04 change SHALL include unit tests for Plan determinism, dependency resolution, blocker refusal, low-RAM MySQL refusal, already-present skipping and the zero-step Plan.
 6. THE S04 change SHALL include unit tests for sudo classification, `dpkg-query` parsing, NGINX site classification and listener conflicts.
-7. THE S04 change SHALL include unit tests for the Operation_State transition table, startup marking of in-flight Operations and the Reconcile decision table.
+7. THE S04 change SHALL include unit tests for the Operation_State transition table, startup marking of in-flight Operations, the Reconcile decision table (missing unit is not failure, inconclusive evidence stays UnknownOutcome) and the gating of manual resolution.
 8. THE S04 change SHALL include Engine unit tests with a scripted fake Executor for step failure, disconnect without relaunch, cancel between steps and poll retry.
 9. THE S04 change SHALL include Store unit tests for migration idempotence, absence of secret columns and the output cap.
 10. THE S04 change SHALL add no property-testing framework and no end-to-end suite.
+11. THE S04 change SHALL include unit tests for Remote_Lock acquisition classification, ownership record parsing, foreign-owner release refusal and stale-lock handling.
+12. THE S04 change SHALL include unit tests that profile removal and material edits are refused while an Operation is non-terminal and that history survives profile removal.
+13. THE S04 change SHALL include unit tests that essential verification outcomes decide component and Operation results.
 
 ### Requirement 24: Non-goals
 
@@ -393,7 +420,7 @@ S04 adds the first server mutations to Ossiframe: installing a base stack (Git, 
 
 1. THE S04 change SHALL implement none of: Laravel and application lifecycle, vhosts and FPM pools for applications, database users and databases, SSL and Certbot, firewall or SSH changes, multiple PHP versions and PPAs, Node, Python or container adapters, adoption of existing servers, monitoring, automatic cloud server creation.
 2. THE S04 change SHALL add no sudo password support.
-3. THE S04 change SHALL add no remote lock, and THE Engine SHALL rely on the dpkg lock and the `ossiframe-op-*` unit scan.
+3. THE S04 change SHALL add no automatic repair (`dpkg --configure -a`, package removal), no modification of APT sources and no adoption of unmanaged servers.
 4. THE S04 change SHALL add no dynamic plugin mechanism.
 
 ### Requirement 25: S04 completion criteria
@@ -406,8 +433,71 @@ S04 adds the first server mutations to Ossiframe: installing a base stack (Git, 
 2. THE S04 SHALL be complete only when every mutation is shown in a Plan, approved by the user, bound to server, host key and Plan_Digest, and executed by the Engine alone.
 3. THE S04 SHALL be complete only when Doctor still exposes no mutating or privileged command and its drift tests pass.
 4. THE S04 SHALL be complete only when the default stack is provisioned on a Disposable_Server and every component check passes.
-5. THE S04 SHALL be complete only when interruption during `apt-install` yields UnknownOutcome and Reconcile resolves it without automatic retry.
+5. THE S04 SHALL be complete only when interruption during `apt-install` yields UnknownOutcome and Reconcile or manual resolution handles it from evidence without automatic retry.
 6. THE S04 SHALL be complete only when the Deploy shell completes preflight, plan, approval, operation and history on the Disposable_Server.
 7. THE S04 SHALL be complete only when a project generated with `--enable-provisioning` builds, and one generated without it exposes no provisioning command.
 8. THE S04 SHALL be complete only when all quality gates in Requirement 23 pass.
 9. THE S04 SHALL be complete only when the Verification_Record is honest and every documented claim is backed by a real run.
+10. THE S04 SHALL be complete only when the Remote_Lock behavior is observed on the Disposable_Server.
+
+### Requirement 26: Remote exclusion lock
+
+**User Story:** As a user, I want a second desktop or a crashed app to be unable to start a conflicting mutation, so that two Ossiframe operations never overlap on one server.
+
+#### Acceptance Criteria
+
+1. BEFORE any mutating step, THE Engine SHALL acquire the Remote_Lock by starting the transient unit `ossiframe-provision-lock` through `sudo -n /usr/bin/systemd-run` with fixed argv.
+2. THE acquisition SHALL be atomic, so that a second start of the same unit name fails, and THE Engine SHALL then return `busy` with the owner details read from the unit.
+3. THE Remote_Lock unit description SHALL be the ownership record and SHALL contain the operation id, the app id, the desktop installation id and the start time, built only from validated values.
+4. THE Remote_Lock SHALL be held by a remote unit and SHALL NOT depend on the SSH session or the desktop process, so that it survives SSH interruption and application crashes.
+5. THE Engine SHALL hold the Remote_Lock through all steps and verification and SHALL release it only when the Operation reaches Succeeded, Failed or Cancelled, or through an explicit recovery action.
+6. THE Engine SHALL keep the Remote_Lock while an Operation is UnknownOutcome.
+7. THE Engine SHALL NOT stop or remove a Remote_Lock whose ownership record names a different operation.
+8. WHEN a Remote_Lock owner is not a non-terminal Operation in the local Store, THE Engine SHALL report it as possibly stale with the owner details, and SHALL release it only through `provision_release_stale_lock`, which the Engine SHALL allow only after its own evidence shows no active `ossiframe-op-*` unit, no apt or dpkg process and free lock files, and SHALL record the decision and evidence.
+9. THE Engine SHALL keep the native apt and dpkg locks in force, and THE preflight unit scan SHALL remain advisory.
+10. THE documentation and the Deploy UI SHALL state that the Remote_Lock is cooperative among Ossiframe instances, that a host reboot clears it, and SHALL NOT claim protection against other tools or administrators.
+11. IF the Remote_Lock cannot be acquired reliably because `systemd-run` is unavailable or the result cannot be classified, THEN THE Engine SHALL refuse to run mutating steps.
+
+### Requirement 27: Server identity and operation history
+
+**User Story:** As a user, I want operation history to stay accurate and a profile change to never redirect an approved operation, so that records and execution always refer to the server I approved.
+
+#### Acceptance Criteria
+
+1. THE `operations` table SHALL keep a nullable server reference and an Identity_Snapshot (name, host, port, user, host key SHA-256).
+2. WHEN a server profile is removed, THE Store SHALL keep its Operations with a null server reference.
+3. WHILE a server has an Operation in Pending, Running, Verifying or UnknownOutcome, THE ServerService SHALL refuse removal, a change of host, port, username or authentication configuration, and a pinned host key replacement with `plan` reason `serverInUse`, and SHALL allow a display-name change.
+4. BEFORE each step launch, each poll batch, reconcile and resolution, THE Engine SHALL compare the connection identity (server id, endpoint, pinned host key) with the Operation Identity_Snapshot.
+5. IF the identity differs, THEN THE Engine SHALL send no further command and SHALL set UnknownOutcome when a step may be running.
+6. THE Engine SHALL scope one explicit connection identity to the whole Operation.
+7. THE Preflight classification SHALL use the Identity_Snapshot endpoint and pinned host key of the current server.
+
+### Requirement 28: Package sources and APT behavior
+
+**User Story:** As a server owner, I want packages to come only from official Ubuntu archives, so that provisioning never installs from an unreviewed source.
+
+#### Acceptance Criteria
+
+1. THE Preflight SHALL read `/etc/apt/sources.list`, `/etc/apt/sources.list.d/*.list` and `*.sources` (deb822) without modifying them.
+2. THE Source_Allowlist SHALL contain `archive.ubuntu.com`, `*.archive.ubuntu.com` (including cloud mirrors under it), `security.ubuntu.com` and `ports.ubuntu.com`, kept as data in the Ubuntu_Provisioning_Module. Other provider mirrors SHALL be added only after verification.
+3. IF an enabled source host is outside the Source_Allowlist, THEN THE Preflight_Report SHALL contain a Blocker with an explanation, and THE Engine SHALL NOT modify sources.
+4. IF a source file cannot be read or parsed, THEN THE Preflight_Report SHALL contain a Blocker.
+5. AFTER `apt-get update`, THE `candidate-check` gate SHALL verify that every package has a candidate with an allowlisted origin and that `apt-get install -s` lists only packages from allowlisted origins, and IF not, THEN THE Engine SHALL fail the Operation before `apt-install`.
+6. THE Plan SHALL list estimated transitive packages when package lists allow a simulation, and otherwise SHALL state that they are unknown until after the update. THE gate SHALL store the exact set in the step output.
+7. THE Engine SHALL run APT steps with `DEBIAN_FRONTEND=noninteractive` and `NEEDRESTART_SUSPEND=1`, and THE documentation SHALL state actual `needrestart` behavior only from live verification and SHALL NOT claim that no service restarts.
+8. THE Engine SHALL apply bounded deadlines to APT steps and SHALL NOT terminate apt or dpkg on cancel or client deadline.
+9. THE Engine SHALL NOT run `dpkg --configure -a` or remove packages automatically.
+10. THE failure messages SHALL give actionable recovery text that the user performs manually.
+
+### Requirement 29: Manual recovery from UnknownOutcome
+
+**User Story:** As a user, I want a safe way to close an unresolved operation after I have inspected the server, so that a server is not locked forever and nothing is retried blindly.
+
+#### Acceptance Criteria
+
+1. THE Engine SHALL expose `provision_mark_resolved(operationId)` only for Operations in UnknownOutcome.
+2. WHEN `provision_mark_resolved` is called, THE Engine SHALL collect its own fresh evidence and SHALL allow the action only when no apt or dpkg process exists, the apt and dpkg lock files are free and no `ossiframe-op-*` unit is active.
+3. WHEN the action is allowed, THE Engine SHALL record the user decision, the time and the evidence in the operation events and `resolution_json`, and SHALL set the Operation to Failed with resolution `markedResolved`.
+4. THE Engine SHALL NOT retry, resume, repair or verify as part of the action.
+5. WHEN the Remote_Lock is owned by that Operation, THE Engine SHALL release it as part of the action.
+6. THE Deploy UI SHALL state that the action records the user decision, verifies nothing, and that the next step is a fresh preflight and a new Plan.

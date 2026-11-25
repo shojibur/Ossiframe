@@ -1,6 +1,6 @@
 # ADR-0005: Server provisioning and configuration ownership
 
-Status: Accepted (2026-11-24), with open questions.
+Status: Accepted (2026-11-24). S04 notes below are design facts; live behaviour is pending verification (S04 task 8).
 
 ## Decision
 - Fresh-server provisioning targets Ubuntu 24.04 first. Ubuntu 26.04 is added only after verification.
@@ -13,7 +13,13 @@ Status: Accepted (2026-11-24), with open questions.
 - Initial database: MySQL, bound to localhost. PostgreSQL later.
 - The server's observed state is authoritative; local records are cache.
 
-## Open questions (resolve in S04)
-- Composer from the Ubuntu archive or the official installer with checksum verification.
-- How to wait for `unattended-upgrades` to release the dpkg lock on fresh VPS images.
-- MySQL root access on Ubuntu (socket authentication via sudo) and creating per-app users.
+## S04 resolutions
+- **Composer:** the Ubuntu archive package (universe). The official installer is rejected because it downloads and runs code from the network, against the archive-only rule.
+- **Waiting for `unattended-upgrades`:** preflight warns on apt/dpkg activity. The install step uses `-o DPkg::Lock::Timeout=300`. Ossiframe never kills apt or dpkg. Pending verification on a fresh image.
+- **Package sources:** preflight blocks any enabled source outside the allowlist (`archive.ubuntu.com`, `*.archive.ubuntu.com`, `security.ubuntu.com`, `ports.ubuntu.com`), and the candidate gate re-checks origins after `apt-get update`. No PPAs. Sources are never modified.
+- **Existing servers:** classified `ExistingUnmanaged` and blocked; no adoption. `OssiframeManaged` requires a local Succeeded operation for the same identity, never package presence.
+- **Config files:** S04 writes none. The default distro configuration is used, and the config-write primitive (back up, write, validate, reload, restore) is deferred to S05.
+
+## Open questions
+- MySQL root access: S04 verification uses `sudo -n /usr/bin/mysql --no-defaults` over `auth_socket` (pending verification). Per-app database users are S05.
+- Provider mirror hosts for the source allowlist: added only after verification.

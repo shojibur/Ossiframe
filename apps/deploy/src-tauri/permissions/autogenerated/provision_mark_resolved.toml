@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-provision-mark-resolved"
+description = "Enables the provision_mark_resolved command without any pre-configured scope."
+commands.allow = ["provision_mark_resolved"]
+
+[[permission]]
+identifier = "deny-provision-mark-resolved"
+description = "Denies the provision_mark_resolved command without any pre-configured scope."
+commands.deny = ["provision_mark_resolved"]

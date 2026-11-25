@@ -50,6 +50,9 @@ struct NewArgs {
     /// Use plain `path` dependencies on a local Ossiframe checkout (testing only).
     #[arg(long, value_name = "PATH")]
     ossiframe_local: Option<PathBuf>,
+    /// Allow modules that run commands as root on servers (`ubuntu-provisioning`).
+    #[arg(long)]
+    enable_provisioning: bool,
     /// Allow identifiers under dev.ossiframe.*.
     #[arg(long)]
     allow_ossiframe_namespace: bool,
@@ -66,6 +69,7 @@ struct NewRequest {
     identifier: AppIdentifier,
     modules: Vec<ModuleId>,
     with_example_module: bool,
+    enable_provisioning: bool,
     rev: Option<String>,
     ossiframe_local: Option<PathBuf>,
 }
@@ -86,6 +90,7 @@ fn validate_new(a: NewArgs) -> Result<NewRequest, InputError> {
         identifier,
         modules,
         with_example_module: a.with_example_module,
+        enable_provisioning: a.enable_provisioning,
         rev,
         ossiframe_local: a.ossiframe_local,
     })
@@ -134,6 +139,7 @@ fn shell_quote(s: &str) -> String {
 
 fn prepare(req: &NewRequest) -> Result<Prepared, plan::PlanError> {
     let modules = plan::resolve_modules(&plan::catalog(), &req.modules, req.with_example_module)?;
+    plan::check_privileged(&modules, req.enable_provisioning)?;
     let repo = repo_root();
     let source = plan::pick_source(
         req.rev.as_deref(),
@@ -259,6 +265,7 @@ mod tests {
             identifier: "dev.example.acme".into(),
             modules: vec![],
             with_example_module: false,
+            enable_provisioning: false,
             rev: None,
             ossiframe_local: None,
             allow_ossiframe_namespace: false,

@@ -144,6 +144,25 @@ pub enum CredentialKindDto {
     Passphrase,
 }
 
+/// Fixed message for a privileged command refused by the read-only guard.
+pub const PRIVILEGE_DENIED_MESSAGE: &str = "privileged command was not allowed";
+
+/// Why a plan or operation request was refused.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PlanReason {
+    UnknownPlan,
+    Superseded,
+    Expired,
+    Mismatch,
+    WrongServer,
+    Busy,
+    ServerInUse,
+    Blocked,
+    RePlanRequired,
+    NotSupported,
+}
+
 /// Errors returned to the frontend. Messages are short and sanitized.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, thiserror::Error)]
 #[serde(
@@ -200,6 +219,10 @@ pub enum IpcError {
     /// raw command output.
     #[error("operation failed: {message}")]
     OperationFailed { message: String },
+    /// A plan, approval or operation request was refused. The message is
+    /// short and never contains raw command output.
+    #[error("plan: {message}")]
+    Plan { reason: PlanReason, message: String },
     #[error("internal error")]
     Internal,
 }
@@ -220,6 +243,9 @@ impl From<ExecError> for IpcError {
             ExecError::Cancelled => IpcError::Cancelled,
             ExecError::ConnectionLost => IpcError::ConnectionLost,
             ExecError::Channel(m) => IpcError::Protocol { message: cap(&m) },
+            ExecError::PrivilegeDenied => IpcError::OperationFailed {
+                message: PRIVILEGE_DENIED_MESSAGE.into(),
+            },
         }
     }
 }
@@ -259,6 +285,10 @@ impl From<ServiceError> for IpcError {
             ServiceError::AlreadyPinned => IpcError::AlreadyPinned,
             ServiceError::ConfirmationMismatch => IpcError::ConfirmationMismatch,
             ServiceError::NotConnected => IpcError::NotConnected,
+            ServiceError::ServerInUse => IpcError::Plan {
+                reason: PlanReason::ServerInUse,
+                message: "the server has an operation that is running or needs review".into(),
+            },
             ServiceError::Exec(e) => e.into(),
             ServiceError::Connect(c) => match c {
                 ConnectError::Unreachable(m) => IpcError::Unreachable { message: cap(&m) },
@@ -354,6 +384,31 @@ mod tests {
             .unwrap(),
             serde_json::json!({"kind": "operationFailed", "message": "result too large"})
         );
+    }
+
+    #[test]
+    fn privilege_denied_maps_to_fixed_message() {
+        assert_eq!(
+            IpcError::from(ExecError::PrivilegeDenied),
+            IpcError::OperationFailed {
+                message: PRIVILEGE_DENIED_MESSAGE.into()
+            }
+        );
+    }
+
+    #[test]
+    fn plan_error_serializes_with_camel_case_reason() {
+        let v = serde_json::to_value(IpcError::Plan {
+            reason: PlanReason::ServerInUse,
+            message: "x".into(),
+        })
+        .unwrap();
+        assert_eq!(
+            v,
+            serde_json::json!({"kind": "plan", "reason": "serverInUse", "message": "x"})
+        );
+        let v = serde_json::to_value(PlanReason::RePlanRequired).unwrap();
+        assert_eq!(v, serde_json::json!("rePlanRequired"));
     }
 
     #[test]

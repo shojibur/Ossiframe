@@ -103,6 +103,10 @@ pub enum ServiceError {
     ConfirmationMismatch,
     #[error("not connected")]
     NotConnected,
+    /// The server has an unresolved operation, so profile changes that could
+    /// redirect it are refused.
+    #[error("the server has an operation that is running or needs review")]
+    ServerInUse,
     #[error("{0}")]
     Exec(ExecError),
 }
@@ -112,6 +116,7 @@ impl From<StoreError> for ServiceError {
         match e {
             StoreError::NotFound => ServiceError::NotFound,
             StoreError::AlreadyPinned => ServiceError::AlreadyPinned,
+            StoreError::InUse => ServiceError::ServerInUse,
             StoreError::Db(m) => ServiceError::Storage(m),
         }
     }
@@ -129,13 +134,16 @@ impl From<TokenError> for ServiceError {
     }
 }
 
+/// Cloning shares the same store, sessions and approvals. The provisioning
+/// engine uses a clone to run commands from a background task.
+#[derive(Clone)]
 pub struct ServerService {
-    store: Store,
+    store: Arc<Store>,
     vault: Arc<dyn SecretVault>,
     connector: Arc<dyn Connector>,
     events: Arc<dyn SessionEvents>,
-    sessions: Sessions,
-    tokens: TrustTokens,
+    sessions: Arc<Sessions>,
+    tokens: Arc<TrustTokens>,
 }
 
 impl ServerService {
@@ -146,12 +154,25 @@ impl ServerService {
         events: Arc<dyn SessionEvents>,
     ) -> Self {
         Self {
-            store,
+            store: Arc::new(store),
             vault,
             connector,
             events,
-            sessions: Sessions::default(),
-            tokens: TrustTokens::default(),
+            sessions: Arc::default(),
+            tokens: Arc::default(),
+        }
+    }
+
+    /// The shared local store, for the provisioning engine.
+    pub fn store(&self) -> Arc<Store> {
+        self.store.clone()
+    }
+
+    fn refuse_if_in_use(&self, id: &str) -> Result<(), ServiceError> {
+        if self.store.has_unresolved_operation(id)? {
+            Err(ServiceError::ServerInUse)
+        } else {
+            Ok(())
         }
     }
 
@@ -205,6 +226,16 @@ impl ServerService {
     ///
     /// A secret saved for one endpoint and login is never sent to another.
     pub async fn update(&self, id: &str, input: ProfileInput) -> Result<ServerView, ServiceError> {
+        // Refuse before cancelling anything. The store re-checks atomically.
+        let current = self.store.get(id)?;
+        if (current.host != input.host
+            || current.port != input.port
+            || current.auth != input.auth
+            || current.username != input.username)
+            && self.store.has_unresolved_operation(id)?
+        {
+            return Err(ServiceError::ServerInUse);
+        }
         self.sessions.cancel_op(id);
         let guard = self.sessions.guard(id);
         let _g = guard.lock().await;
@@ -248,10 +279,13 @@ impl ServerService {
     /// Removes local state only: session, pending approvals, saved secret,
     /// profile and pin. The remote server is never contacted.
     pub async fn remove(&self, id: &str) -> Result<(), ServiceError> {
+        self.refuse_if_in_use(id)?;
         self.sessions.cancel_op(id);
         let guard = self.sessions.guard(id);
         let _g = guard.lock().await;
         let rec = self.store.get(id)?;
+        // Checked again before any side effect; the store re-checks atomically.
+        self.refuse_if_in_use(id)?;
         self.sessions.close(id).await;
         self.tokens.invalidate_server(id);
         if let Some(r) = &rec.secret_ref {
@@ -434,6 +468,7 @@ impl ServerService {
         token: &str,
         confirm_host: &str,
     ) -> Result<(), ServiceError> {
+        self.refuse_if_in_use(id)?;
         self.sessions.cancel_op(id);
         let guard = self.sessions.guard(id);
         let _g = guard.lock().await;
@@ -823,6 +858,43 @@ mod tests {
         );
         assert!(vault.is_empty());
         assert_eq!(svc.get(&id).unwrap_err(), ServiceError::NotFound);
+    }
+
+    #[tokio::test]
+    async fn active_operation_blocks_remove_and_material_edits_but_not_rename() {
+        let (svc, vault, c) = setup();
+        let id = svc
+            .add(input("example.com", AuthConfig::Password))
+            .unwrap()
+            .record
+            .id;
+        svc.store.pin_host_key(&id, &key(1)).unwrap();
+        svc.connect(&id, secret("pw"), true).await.unwrap();
+        crate::store::tests::raw_operation(&svc.store, "op", &id, "unknownOutcome");
+        let conn = c.conns.lock().unwrap()[0].clone();
+
+        assert_eq!(svc.remove(&id).await, Err(ServiceError::ServerInUse));
+        assert_eq!(
+            svc.update(&id, input("new.example.com", AuthConfig::Password))
+                .await
+                .unwrap_err(),
+            ServiceError::ServerInUse
+        );
+        assert_eq!(
+            svc.replace_host_key(&id, "token", "example.com").await,
+            Err(ServiceError::ServerInUse)
+        );
+        assert!(!conn.is_closed(), "session untouched by refused changes");
+        assert_eq!(vault.len(), 1, "saved secret untouched");
+        let v = svc.get(&id).unwrap();
+        assert!(v.pin.is_some() && v.record.secret_ref.is_some());
+
+        let mut renamed = input("example.com", AuthConfig::Password);
+        renamed.name = ServerName::parse("renamed").unwrap();
+        let v = svc.update(&id, renamed).await.unwrap();
+        assert_eq!(v.record.name.as_str(), "renamed");
+        assert!(v.pin.is_some() && v.record.secret_ref.is_some());
+        assert!(!conn.is_closed());
     }
 
     #[tokio::test]

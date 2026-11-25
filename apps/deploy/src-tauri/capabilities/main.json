@@ -1,0 +1,32 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main",
+  "description": "Ossiframe Deploy main window. Core events plus the app's typed commands only. No fs, shell, http, opener or dialog permissions.",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:event:default",
+    "allow-list-servers",
+    "allow-add-server",
+    "allow-update-server",
+    "allow-remove-server",
+    "allow-connect-server",
+    "allow-disconnect-server",
+    "allow-trust-host-key",
+    "allow-replace-host-key",
+    "allow-cancel-operation",
+    "allow-run-operation",
+    "allow-list-modules",
+    "allow-provision-components",
+    "allow-provision-preflight",
+    "allow-provision-create-plan",
+    "allow-provision-approve-plan",
+    "allow-provision-cancel",
+    "allow-provision-reconcile",
+    "allow-provision-mark-resolved",
+    "allow-provision-release-stale-lock",
+    "allow-provision-get-operation",
+    "allow-provision-list-operations"
+  ]
+}

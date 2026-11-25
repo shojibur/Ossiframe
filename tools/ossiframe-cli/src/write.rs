@@ -393,6 +393,121 @@ mod tests {
         assert!(!lic.contains("linux-audit"), "{lic}");
     }
 
+    /// Generates an app with the given modules into a temp dir and returns the
+    /// dir. Caller removes it.
+    fn generate_with(tag: &str, mods: &[&str]) -> PathBuf {
+        use crate::plan::{catalog, check_privileged, resolve_modules};
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let base = std::env::temp_dir().join(format!("ossiframe-cli-{tag}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&base);
+        let src = git();
+        let ids: Vec<_> = mods
+            .iter()
+            .map(|m| ossiframe_core::ModuleId::parse(m).unwrap())
+            .collect();
+        let modules = resolve_modules(&catalog(), &ids, false).unwrap();
+        check_privileged(&modules, mods.contains(&"ubuntu-provisioning")).unwrap();
+        let tokens = render::starter_tokens(
+            "Acme Ops",
+            "dev.example.acme",
+            "acme-ops",
+            "acme_ops",
+            &src,
+            &modules,
+        );
+        let job = Job {
+            repo_root: &root,
+            target: &base.join("app"),
+            source: &src,
+            modules: &modules,
+            tokens: &tokens,
+        };
+        generate(&job).unwrap();
+        base
+    }
+
+    fn read(base: &Path, rel: &str) -> String {
+        fs::read_to_string(base.join("app").join(rel)).unwrap()
+    }
+
+    #[test]
+    fn default_output_has_no_provisioning_and_keeps_license_notice() {
+        let base = generate_with("noprov", &["linux-inventory"]);
+        for rel in [
+            "src-tauri/Cargo.toml",
+            "src-tauri/build.rs",
+            "src-tauri/capabilities/main.json",
+            "src-tauri/src/lib.rs",
+            "src/modules.ts",
+            "README.md",
+        ] {
+            assert!(!read(&base, rel).contains("provision"), "{rel}");
+        }
+        assert!(!base.join("app/src/modules/ubuntu-provisioning").exists());
+        assert!(read(&base, "OSSIFRAME-LICENSE").contains("MIT License"));
+        fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[test]
+    fn provisioning_output_has_feature_commands_ui_and_license_listing() {
+        let base = generate_with("prov", &["ubuntu-provisioning"]);
+        let cargo = read(&base, "src-tauri/Cargo.toml");
+        assert!(
+            cargo.contains("features = [\"tauri\", \"provisioning\"]"),
+            "{cargo}"
+        );
+        assert!(cargo.contains("ossiframe-mod-ubuntu-provisioning = { git = "));
+        let lib = read(&base, "src-tauri/src/lib.rs");
+        assert!(lib.contains("provisioning::setup(app, Arc::new("));
+        assert!(lib.contains("PROVISION_COMMAND_NAMES"));
+        let build = read(&base, "src-tauri/build.rs");
+        let cap = read(&base, "src-tauri/capabilities/main.json");
+        serde_check(&cap);
+        for n in ossiframe_desktop_names() {
+            assert!(lib.contains(&format!("provision::{n},")), "handler {n}");
+            assert!(build.contains(&format!("\"{n}\",")), "build {n}");
+            let perm = format!("\"allow-{}\"", n.replace('_', "-"));
+            assert!(cap.contains(&perm), "capability {n}");
+        }
+        assert!(
+            base.join("app/src/modules/ubuntu-provisioning/index.ts")
+                .is_file()
+        );
+        assert!(read(&base, "src/modules.ts").contains("ui_ubuntu_provisioning"));
+        let lic = read(&base, "OSSIFRAME-LICENSE");
+        assert!(lic.contains("- src/modules/ubuntu-provisioning\n"), "{lic}");
+        assert!(lic.contains("MIT License"));
+        fs::remove_dir_all(&base).unwrap();
+    }
+
+    /// The capability file must stay valid JSON (comma placement).
+    fn serde_check(cap: &str) {
+        assert!(cap.contains("\"allow-list-modules\","), "{cap}");
+        assert!(!cap.contains(",\n  ]"), "trailing comma: {cap}");
+    }
+
+    /// The ten names the generator writes, read from the template-side list.
+    fn ossiframe_desktop_names() -> Vec<String> {
+        let src = fs::read_to_string(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../crates/ossiframe-desktop/src/provisioning/commands.rs"),
+        )
+        .unwrap();
+        let block = src
+            .split("PROVISION_COMMAND_NAMES: &[&str] = &[")
+            .nth(1)
+            .unwrap();
+        let block = block.split("];").next().unwrap();
+        let names: Vec<String> = block
+            .split('"')
+            .skip(1)
+            .step_by(2)
+            .map(str::to_owned)
+            .collect();
+        assert_eq!(names.len(), 10);
+        names
+    }
+
     #[test]
     fn failure_leaves_no_target_and_no_temp_dir() {
         let base = std::env::temp_dir().join(format!("ossiframe-cli-write-{}", std::process::id()));

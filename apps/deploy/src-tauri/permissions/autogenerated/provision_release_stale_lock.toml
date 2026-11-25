@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-provision-release-stale-lock"
+description = "Enables the provision_release_stale_lock command without any pre-configured scope."
+commands.allow = ["provision_release_stale_lock"]
+
+[[permission]]
+identifier = "deny-provision-release-stale-lock"
+description = "Denies the provision_release_stale_lock command without any pre-configured scope."
+commands.deny = ["provision_release_stale_lock"]

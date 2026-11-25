@@ -6,16 +6,23 @@ pub mod executor;
 pub mod host_key;
 pub mod ident;
 pub mod module;
+pub mod provision;
 pub mod redact;
 pub mod registry;
 pub mod secret;
 
-pub use command::CommandSpec;
-pub use executor::{CancelToken, ExecError, ExecResult, Executor, ExitStatus};
+pub use command::{CommandSpec, Privilege};
+pub use executor::{CancelToken, ExecError, ExecResult, Executor, ExitStatus, ReadOnly};
 pub use host_key::{HostKeyDecision, PinnedHostKey, PresentedHostKey};
 pub use ident::{Hostname, KeyPath, Port, ServerName, SshUser, ValidationError};
 pub use module::{
     Module, ModuleId, ModuleManifest, OperationContext, OperationError, OperationId, OperationInfo,
+};
+pub use provision::{
+    CheckResult, CheckStatus, ComponentInfo, ComponentVerdict, Conflict, Drift, Event, FileChange,
+    IllegalTransition, OperationState, PackageChange, PackageState, Plan, PlanError, PlanStep,
+    PlanTarget, Preconditions, PreflightReport, PriorOperation, Provisioner, Resources,
+    ServerClass, ServiceEffect, Severity, StepMode, SudoMode, next,
 };
 pub use registry::{Registry, RegistryBuilder, RegistryError, RunError};
 pub use secret::SecretString;

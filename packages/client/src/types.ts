@@ -37,6 +37,18 @@ export type ConnectOutcome =
 
 export type CredentialKind = "password" | "passphrase";
 
+export type PlanReason =
+  | "unknownPlan"
+  | "superseded"
+  | "expired"
+  | "mismatch"
+  | "wrongServer"
+  | "busy"
+  | "serverInUse"
+  | "blocked"
+  | "rePlanRequired"
+  | "notSupported";
+
 export type IpcError =
   | { kind: "validation"; field: string; message: string }
   | { kind: "notFound" }
@@ -65,6 +77,7 @@ export type IpcError =
   | { kind: "confirmationMismatch" }
   | { kind: "protocol"; message: string }
   | { kind: "operationFailed"; message: string }
+  | { kind: "plan"; reason: PlanReason; message: string }
   | { kind: "internal" };
 
 export interface OsInfo {
