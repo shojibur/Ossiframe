@@ -91,4 +91,4 @@ Run on 2026-11-27 against the local checkout at `c888a37`, after S05 was added.
 - Read-only app: no `provision_*` command in `src/lib.rs` or `build.rs`, and no `allow-provision-*` permission in `capabilities/main.json`. `cargo tree` shows no `ossiframe-mod-ubuntu-provisioning` and no `provisioning` feature on `ossiframe-desktop`.
 - Provisioning app: all 10 `provision_*` commands in `src/lib.rs` and `build.rs`, and the 10 matching `allow-provision-*` permissions in the capability.
 - No generator or template fix was needed.
-- Not run: a check against a published revision.
+- Against a published revision: covered by S06 CI. [CI #2](https://github.com/shojibur/Ossiframe/actions/runs/45961850923) generated both apps with `--rev 3f5dcca` on a clean runner and passed `cargo check`, `pnpm typecheck`, `pnpm build` and the provisioning-exposure checks. See `docs/verification/s06-distribution-and-verification.md`.

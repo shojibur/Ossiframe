@@ -34,7 +34,7 @@ Order: signing config and version check, CI workflow, generated project check, r
   - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5_
 
 - [ ] 6. Verification
-  - [ ] 6.1 CI run
+  - [x] 6.1 CI run
     - After the user approves pushing the workflows, confirm a CI run on `main` passes, including the generated project job. Fix real failures only. Record the run link in `docs/verification/s06-distribution-and-verification.md`.
     - _Requirements: 6.1_
   - [ ] 6.2 Release dry run on the user's Mac
