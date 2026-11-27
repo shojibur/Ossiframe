@@ -27,6 +27,8 @@ id_ecdsa*
 id_ed25519*
 !*.pub
 known_hosts
+# Published Git host keys shipped with app-deploy (public data, not user SSH state).
+!/modules/app-deploy/data/known_hosts
 *.kdbx
 secrets.*
 credentials.*
