@@ -23,7 +23,7 @@ S06 makes Ossiframe Doctor and Ossiframe Deploy installable from GitHub Releases
 
 1. THE CI_Workflow SHALL run `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings` with and without `--all-features`, `cargo test --workspace --all-features`, `pnpm typecheck` and `pnpm lint`.
 2. THE CI_Workflow SHALL check Doctor and Deploy individually and SHALL fail if Doctor's dependency tree contains `ossiframe-mod-app-deploy` or `ossiframe-mod-ubuntu-provisioning`.
-3. THE CI_Workflow SHALL run `cargo audit` and `pnpm audit` and SHALL fail only on findings absent from a reviewed allowlist that states a reason for each entry.
+3. THE CI_Workflow SHALL run `cargo audit --deny warnings` and `pnpm audit`, and SHALL fail on any finding absent from the reviewed list in `.cargo/audit.toml`, which states a reason for each entry.
 4. THE CI_Workflow SHALL use workflow-level permission `contents: read`.
 5. Every third-party action SHALL be pinned to a full commit SHA.
 
@@ -43,7 +43,7 @@ S06 makes Ossiframe Doctor and Ossiframe Deploy installable from GitHub Releases
 
 #### Acceptance Criteria
 
-1. WHEN a `v*` tag is pushed, THE Release_Workflow SHALL fail unless the tag equals the version in the workspace `Cargo.toml`, both `tauri.conf.json` files and the root `package.json`.
+1. WHEN a `v*` tag is pushed, THE Release_Workflow SHALL fail unless the tag equals the version in the workspace `Cargo.toml`, both `tauri.conf.json` files and both app `package.json` files.
 2. THE Release_Workflow SHALL run the CI checks before building.
 3. THE Release_Workflow SHALL build Doctor and Deploy for macOS Apple Silicon as `.dmg` and zipped `.app`, and SHALL write one `SHA256SUMS` file covering every artifact.
 4. THE Release_Workflow SHALL create a Draft_Release and SHALL never publish it.

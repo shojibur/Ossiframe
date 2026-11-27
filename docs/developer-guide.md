@@ -32,15 +32,15 @@ cargo run -p ossiframe-cli -- new ../acme-audit \
 
 Flags of `new`:
 
-| Flag | Meaning |
-|---|---|
-| `--name` | Product name, 1 to 64 chars, starts with a letter (`A-Z a-z 0-9 space _ -`). |
-| `--identifier` | Reverse-DNS id such as `dev.example.acme`. Lowercase segments. `dev.ossiframe.*` is refused unless `--allow-ossiframe-namespace`. |
-| `--modules a,b` | Optional modules (comma separated). Today: `linux-inventory`, `linux-audit`, and `ubuntu-provisioning` with `--enable-provisioning` (see [Module catalog](#module-catalog)). Required dependencies are added automatically. Default is none. |
-| `--enable-provisioning` | Required to include `ubuntu-provisioning`, and valid only together with it. Off by default. |
-| `--with-example-module` | Copies the example `ports` module into `<dir>/modules/ports/`. |
-| `--rev <40-hex>` | Ossiframe commit to pin. Default: `HEAD` of this checkout. |
-| `--ossiframe-local <path>` | Use path dependencies on a local Ossiframe checkout. Cannot be combined with `--rev`. |
+| Flag                       | Meaning                                                                                                                                                                                                                                      |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--name`                   | Product name, 1 to 64 chars, starts with a letter (`A-Z a-z 0-9 space _ -`).                                                                                                                                                                 |
+| `--identifier`             | Reverse-DNS id such as `dev.example.acme`. Lowercase segments. `dev.ossiframe.*` is refused unless `--allow-ossiframe-namespace`.                                                                                                            |
+| `--modules a,b`            | Optional modules (comma separated). Today: `linux-inventory`, `linux-audit`, and `ubuntu-provisioning` with `--enable-provisioning` (see [Module catalog](#module-catalog)). Required dependencies are added automatically. Default is none. |
+| `--enable-provisioning`    | Required to include `ubuntu-provisioning`, and valid only together with it. Off by default.                                                                                                                                                  |
+| `--with-example-module`    | Copies the example `ports` module into `<dir>/modules/ports/`.                                                                                                                                                                               |
+| `--rev <40-hex>`           | Ossiframe commit to pin. Default: `HEAD` of this checkout.                                                                                                                                                                                   |
+| `--ossiframe-local <path>` | Use path dependencies on a local Ossiframe checkout. Cannot be combined with `--rev`.                                                                                                                                                        |
 
 Invalid input stops with a one-line error and writes nothing.
 
@@ -48,12 +48,12 @@ Invalid input stops with a one-line error and writes nothing.
 
 The `linux-inventory`, `linux-audit` and `ports` operations are read-only, take no arguments (pass `null`; anything else is rejected) and use predefined commands without `sudo`. `ubuntu-provisioning` is different: see below.
 
-| Module | Depends on | Operations |
-|---|---|---|
-| `linux-inventory` | none | `server-info` (hostname, OS, kernel, CPU, memory, root disk), `services` (systemd services and their state), `listening-sockets` (TCP/UDP listeners with binding class and visible process), `software` (server software known to the dpkg database). Includes a UI page. |
-| `linux-audit` | `linux-inventory` | Eight steps, in scan order: `resources`, `services`, `network`, `software`, `ssh`, `firewall`, `updates`, `certificates`. No UI page. |
-| `ubuntu-provisioning` | `linux-inventory` | Installs a base stack (Git, NGINX, PHP 8.3 CLI and FPM, Composer, MySQL, optional Redis) from the Ubuntu 24.04 archive through preflight, plan and approval. It runs commands as root through `sudo -n`. It registers no `run_operation` operations; the app uses the `provision_*` commands. Has UI pages in `modules/ubuntu-provisioning/ui/`. Live behaviour is pending verification. |
-| `ports` (example, `--with-example-module`) | none | The simple third-party example copied into your app. It is not part of the catalog; use it as the model for your own module. |
+| Module                                     | Depends on        | Operations                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ------------------------------------------ | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `linux-inventory`                          | none              | `server-info` (hostname, OS, kernel, CPU, memory, root disk), `services` (systemd services and their state), `listening-sockets` (TCP/UDP listeners with binding class and visible process), `software` (server software known to the dpkg database). Includes a UI page.                                                                                                                                                                                                                                        |
+| `linux-audit`                              | `linux-inventory` | Eight steps, in scan order: `resources`, `services`, `network`, `software`, `ssh`, `firewall`, `updates`, `certificates`. No UI page.                                                                                                                                                                                                                                                                                                                                                                            |
+| `ubuntu-provisioning`                      | `linux-inventory` | Installs a base stack (Git, NGINX, PHP 8.3 CLI and FPM, Composer, MySQL, optional Redis) from the Ubuntu 24.04 archive through preflight, plan and approval. It runs commands as root through `sudo -n`. It registers no `run_operation` operations; the app uses the `provision_*` commands. Has UI pages in `modules/ubuntu-provisioning/ui/`. One full install was verified on a fresh Ubuntu 24.04 server; recovery and locking checks are still pending (see [known-limitations.md](known-limitations.md)). |
+| `ports` (example, `--with-example-module`) | none              | The simple third-party example copied into your app. It is not part of the catalog; use it as the model for your own module.                                                                                                                                                                                                                                                                                                                                                                                     |
 
 Selecting `linux-audit` adds `linux-inventory` to the generated app automatically, ordered before it.
 
@@ -67,7 +67,7 @@ cargo run -p ossiframe-cli -- new ../acme-deploy \
   --modules ubuntu-provisioning --enable-provisioning
 ```
 
-With the flag, the generated app enables the `ossiframe-desktop` `provisioning` feature, registers the module, calls `provisioning::setup` and lists the ten `provision_*` commands in its handler, build manifest and capability file. Without the flag (the default, including the plain starter) none of that is generated and the app stays read-only: it has no `provision_*` command, and `run_operation` rejects `Privilege::Root` commands. Doctor never includes provisioning. See [security.md](security.md) for the limits of these guards.
+With the flag, the generated app enables the `ossiframe-desktop` `provisioning` feature, registers the module, calls `provisioning::setup` and lists the ten `provision_*` commands in its handler, build manifest and capability file. Without the flag (the default, including the plain starter) none of that is generated and the app stays read-only: it has no `provision_*` command, and `run_operation` rejects `Privilege::Root` and `Privilege::RunAs` commands. Doctor never includes provisioning. See [security.md](security.md) for the limits of these guards.
 
 ### Use `linux-audit` in your app
 
@@ -85,6 +85,24 @@ const step = await runOperation(serverId, "linux-audit", "resources", null);
 Each step returns a step result with `step`, `observedAt`, step `evidence` and a list of `checks`. A check has `ruleId`, `title`, `category`, `outcome`, `severity` (only when the outcome is `finding`), `resource`, `evidence` (bounded lines), `explanation`, `recommendation` (advice text, never executed), `observedAt`, `limitations` and `inferred`.
 
 Outcomes are `passed`, `finding`, `unavailable`, `incomplete`, `notApplicable` and `error`. Severities are `critical`, `high`, `medium`, `low` and `info`. Treat `unavailable`, `incomplete` and `error` as "not assessed", not as passed. There is no score. Run the steps one at a time in the order listed by `list_modules`, and combine the results in your UI.
+
+## Ossiframe Deploy and the `app-deploy` module
+
+Ossiframe Deploy (`apps/deploy`) combines `linux-inventory`, `ubuntu-provisioning` and `app-deploy`. `app-deploy` (`modules/app-deploy`) deploys applications from Git to a provisioned server:
+
+- App types: Laravel, generic PHP (optionally with a MySQL database) and static HTML. A type is data plus step builders inside the module, so new types are added there without changing Core.
+- Each app gets its own Linux user (`ossi-<slug>`), home under `/srv/ossiframe/apps/<slug>`, PHP-FPM pool, NGINX site, and optionally its own MySQL database and user.
+- Application code, Composer and Artisan run as the app's user through `Privilege::RunAs`, never as root. Root is used for creating the user and its directories, writing system files Ossiframe owns (files named `ossiframe-*` in the NGINX and PHP-FPM directories), testing and reloading NGINX and PHP-FPM, the database, and launching long steps through `systemd-run`, which then run them as the app's user.
+- Deploys go into `releases/<id>`, run a boot check, then switch a `current` symlink. Rollback switches it back.
+- Every change goes through the same plan, approval and operation engine as provisioning, under the same per-server lock.
+
+The generator does not offer `app-deploy` yet: its Tauri commands live in `apps/deploy/src-tauri/src/apps/`, so a generated app cannot use the module. App deployment has not run on a real server yet. See [known-limitations.md](known-limitations.md).
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every push to `main` and every pull request, on a macOS Apple Silicon runner: fmt, clippy (with and without all features), tests, `pnpm typecheck`, `pnpm lint`, `cargo audit --deny warnings` (reviewed exceptions in `.cargo/audit.toml`), `pnpm audit`, separate checks of Doctor and Deploy, a check that Doctor depends on no mutating module, and `shellcheck` for repository scripts.
+
+On pushes, a second job generates a read-only app and a provisioning app in standalone mode pinned to the pushed commit, outside the checkout, and builds and typechecks both. It fails if the read-only app exposes any provisioning command or permission.
 
 ## Local mode and standalone mode
 
@@ -124,7 +142,7 @@ No change to Core is needed. The `ports` example in `examples/custom-module/` is
 ## Security notes
 
 - Modules are trusted compile-time code. A module manifest is not a sandbox.
-- Modules built with the default starter are read-only: `run_operation` hands them an executor that rejects `Privilege::Root`. That guard checks the privilege field only; it is not a sandbox and does not stop a user-level command from changing a server. Mutating work belongs in the plan, approval and operation engine enabled by `--enable-provisioning`, not in `run_operation`.
+- Modules built with the default starter are read-only: `run_operation` hands them an executor that rejects `Privilege::Root` and `Privilege::RunAs`. That guard checks the privilege field only; it is not a sandbox and does not stop a user-level command from changing a server. Mutating work belongs in the plan, approval and operation engine enabled by `--enable-provisioning`, not in `run_operation`.
 - Secrets stay in the OS keychain. The frontend can run only operations registered in the app.
 
 ## Read more

@@ -1,0 +1,171 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  checks:
+    name: Checks (macOS Apple Silicon)
+    runs-on: macos-26
+    steps:
+      # actions/checkout v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      # pnpm/action-setup v6.1.1 (version from packageManager in package.json)
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115
+
+      # actions/setup-node v7.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24
+          cache: pnpm
+
+      # The toolchain comes from rust-toolchain.toml through the preinstalled rustup.
+      - name: Rust toolchain
+        run: rustup show active-toolchain
+
+      # Swatinem/rust-cache v2.9.3
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Version consistency
+        run: tools/check-version.sh
+
+      - name: cargo fmt
+        run: cargo fmt --check
+
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: cargo clippy (all features)
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+      - name: cargo test
+        run: cargo test --workspace --all-features
+
+      - name: Check Doctor and Deploy separately
+        run: |
+          cargo check -p ossiframe-doctor
+          cargo check -p ossiframe-deploy
+
+      - name: Doctor has no mutating modules
+        run: |
+          tree="$(cargo tree -p ossiframe-doctor -e normal)"
+          if printf '%s\n' "$tree" | grep -E 'ossiframe-mod-(app-deploy|ubuntu-provisioning)'; then
+            echo "error: Doctor depends on a mutating module" >&2
+            exit 1
+          fi
+
+      - name: pnpm typecheck
+        run: pnpm typecheck
+
+      - name: pnpm lint
+        run: pnpm lint
+
+      - name: cargo audit
+        run: |
+          command -v cargo-audit >/dev/null || cargo install --locked cargo-audit
+          # Reviewed exceptions with reasons are in .cargo/audit.toml.
+          cargo audit --deny warnings
+
+      - name: pnpm audit
+        run: pnpm audit --prod
+
+  shellcheck:
+    name: shellcheck
+    runs-on: ubuntu-24.04
+    steps:
+      # actions/checkout v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: shellcheck
+        run: |
+          mapfile -t scripts < <(git ls-files '*.sh')
+          if [ "${#scripts[@]}" -gt 0 ]; then
+            shellcheck "${scripts[@]}"
+          fi
+
+  generated-projects:
+    name: Generated projects (standalone)
+    # --rev needs a commit that exists on GitHub, so only pushes run this job.
+    if: github.event_name == 'push'
+    runs-on: macos-26
+    steps:
+      # actions/checkout v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      # pnpm/action-setup v6.1.1
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115
+
+      # actions/setup-node v7.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24
+
+      # Swatinem/rust-cache v2.9.3
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
+
+      - name: Generate apps pinned to this commit
+        env:
+          REV: ${{ github.sha }}
+        run: |
+          out="$RUNNER_TEMP/generated"
+          mkdir -p "$out"
+          cargo run -q -p ossiframe-cli -- new "$out/readonly" \
+            --name "Gen Readonly" --identifier com.example.genro \
+            --modules linux-inventory --rev "$REV"
+          cargo run -q -p ossiframe-cli -- new "$out/provision" \
+            --name "Gen Provision" --identifier com.example.genprov \
+            --modules linux-inventory,ubuntu-provisioning --enable-provisioning --rev "$REV"
+
+      - name: Read-only app exposes no provisioning command
+        run: |
+          d="$RUNNER_TEMP/generated/readonly/src-tauri"
+          if grep -nE 'provision_|allow-provision-' "$d/src/lib.rs" "$d/build.rs" "$d/capabilities/main.json"; then
+            echo "error: read-only app exposes provisioning" >&2
+            exit 1
+          fi
+
+      - name: Provisioning app exposes the provisioning commands
+        run: |
+          d="$RUNNER_TEMP/generated/provision/src-tauri"
+          for f in src/lib.rs build.rs; do
+            n="$(grep -oE 'provision_[a-z_]+' "$d/$f" | sort -u | wc -l | tr -d ' ')"
+            [ "$n" -eq 10 ] || { echo "error: $f has $n provisioning commands, expected 10" >&2; exit 1; }
+          done
+          n="$(grep -oE 'allow-provision-[a-z-]+' "$d/capabilities/main.json" | sort -u | wc -l | tr -d ' ')"
+          [ "$n" -eq 10 ] || { echo "error: capability has $n provisioning permissions, expected 10" >&2; exit 1; }
+
+      - name: Build generated apps
+        env:
+          CARGO_TARGET_DIR: ${{ runner.temp }}/generated-target
+        run: |
+          for app in readonly provision; do
+            echo "::group::$app"
+            cd "$RUNNER_TEMP/generated/$app"
+            (cd src-tauri && cargo check)
+            pnpm install
+            pnpm typecheck
+            pnpm build
+            echo "::endgroup::"
+          done

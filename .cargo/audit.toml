@@ -1,0 +1,17 @@
+# Reviewed cargo-audit warnings. CI runs `cargo audit --deny warnings`, so any
+# advisory not listed here fails the build. Each entry needs a reason; revisit
+# them when dependencies change. Checked with
+# `cargo tree -i <crate> --target aarch64-apple-darwin`: none of these three
+# crates is compiled into the macOS build.
+[advisories]
+ignore = [
+  # chrono is reported unmaintained. It enters through russh -> russh-util for
+  # other targets only; not in the macOS build. No known vulnerability.
+  "RUSTSEC-2026-0543",
+  # proc-macro-error is unmaintained. It enters through glib-macros (GTK), which
+  # Tauri uses on Linux only; not in the macOS build.
+  "RUSTSEC-2024-0370",
+  # glib VariantStrIter unsoundness. glib is part of Tauri's Linux (GTK)
+  # dependencies only; not in the macOS build.
+  "RUSTSEC-2024-0429",
+]

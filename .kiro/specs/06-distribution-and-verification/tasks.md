@@ -6,29 +6,29 @@ Order: signing config and version check, CI workflow, generated project check, r
 
 ## Tasks
 
-- [ ] 1. Signing config and version consistency
+- [x] 1. Signing config and version consistency
   - Set `bundle.macOS.signingIdentity` to `"-"` in both `tauri.conf.json` files, after checking the current Tauri 2 config schema.
-  - Add a small version check (a Rust test in an existing crate, or an inline workflow step using `jq` and `grep`) that the workspace `Cargo.toml`, both `tauri.conf.json` files and the root `package.json` share one version, and that a given tag `v<version>` matches.
+  - Add `tools/check-version.sh`, checking that the workspace `Cargo.toml`, both `tauri.conf.json` files and both app `package.json` files share one version, and that a given tag `v<version>` matches.
   - _Requirements: 3.1, 4.1_
 
-- [ ] 2. CI workflow
-  - `.github/workflows/ci.yml` as in the design, on `macos-14`, workflow-level `contents: read`, exposed as a reusable workflow (`workflow_call`) for the release workflow.
+- [x] 2. CI workflow
+  - `.github/workflows/ci.yml` as in the design, on `macos-26`, workflow-level `contents: read`, exposed as a reusable workflow (`workflow_call`) for the release workflow.
   - Look up each action's current release and full commit SHA from its official repository at implementation time; record the version in a comment. Do not recall SHAs.
-  - `audit-allowlist.txt` with the three known `cargo audit` warnings and a reason each; the audit step fails only on entries not listed.
+  - `.cargo/audit.toml` with the three known `cargo audit` warnings and a reason each; CI runs `cargo audit --deny warnings`, so anything not listed fails.
   - Doctor dependency-tree check for `app-deploy` and `ubuntu-provisioning`.
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5_
 
-- [ ] 3. Generated project check
+- [x] 3. Generated project check
   - A `generated-projects` job on push to `main`: generate a read-only app and a provisioning app with `--rev ${{ github.sha }}` under `$RUNNER_TEMP`, build and typecheck both, and grep the read-only app for `provision_` and `allow-provision-`.
   - _Requirements: 2.1, 2.2, 2.3_
 
-- [ ] 4. Release workflow
+- [x] 4. Release workflow
   - `.github/workflows/release.yml`: tag and manual triggers, version check, CI via `workflow_call`, build both apps, zip `.app` with `ditto`, `SHA256SUMS`, then a Draft_Release with `gh` on a tag, or workflow artifacts on a manual run. `contents: write` on the release job only.
   - Optional Developer ID signing and notarization when the `APPLE_*` secrets exist, following the current Tauri 2 macOS signing guide; secrets only in `env:` of the steps that use them.
   - `docs/release-notes.md` template linking install instructions and known limitations.
   - _Requirements: 3.2, 3.3, 3.4, 3.5, 3.6, 4.2, 4.3_
 
-- [ ] 5. Docs
+- [x] 5. Docs
   - `docs/install.md`, `docs/known-limitations.md` (gathered from `docs/verification/` and spec notes, each item with its source), developer guide updates, README install section, starter skill `moduleUis` fix.
   - Write keychain and Gatekeeper behavior in `install.md` only after task 6.2 observes it; until then mark it "not yet observed".
   - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5_

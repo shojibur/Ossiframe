@@ -101,20 +101,20 @@ Order: Core additions (`LinuxUserName`, `RunAs`, `stdin`), desktop store, the `a
   - [x] 7.1 STOP: request explicit approval before any mutation
     - Ask the user (`user_input`) to confirm the test application (type, repository, domain or Host-header test) and to approve before 7.2. Run no `app_create_plan` or later step until they answer.
     - _Requirements: 19.3_
-  - [-] 7.2 Create and verify a Static or Php app
+  - [ ] 7.2 Create and verify a Static or Php app
     - Create from a public HTTPS repo; approve; record steps, the boot check result and the health checks. Confirm the Default_Site is untouched unless the user chose otherwise.
     - _Requirements: 8.3, 8.5, 13.2, 14.2, 14.4_
-  - [~] 7.3 Create and verify a Laravel app with a database
+  - [ ] 7.3 Create and verify a Laravel app with a database
     - Use an SSH repo on a builtin host (record deploy key generation, the pinned host key write and `StrictHostKeyChecking=yes` working) or a public repo if no private repo is available, and state which was used. Record database creation, `.env` mode and owner (0600, app user), a redeploy with migrations opted in, and the health checks.
     - _Requirements: 9.1, 9.3, 9.4, 9.8, 9.12, 10.1, 10.2, 10.4, 11.2, 12.1, 12.2, 14.2, 14.3_
-  - [~] 7.4 Boot check failure, redeploy and rollback
+  - [ ] 7.4 Boot check failure, redeploy and rollback
     - Deploy a commit that fails the boot check (for example a PHP syntax error) and confirm `current` is unchanged and the release is kept. Redeploy a good commit, roll back, and confirm the previous release is live. Confirm a second operation on the same server is refused while one is running.
     - _Requirements: 13.3, 13.4, 13.6, 15.2_
-  - [~] 7.5 Removal and Doctor scope check
+  - [ ] 7.5 Removal and Doctor scope check
     - Remove an app with default options and confirm the site and pool are gone while files, user and database remain; confirm the server profile cannot be removed while an app is not Removed. Confirm Doctor exposes no app-deploy command.
     - _Requirements: 16.1, 16.5, 18.2_
 
-- [~] 8. Verification record and roadmap
+- [ ] 8. Verification record and roadmap
   - Write the sanitized `docs/verification/s05-application-deployment.md` from task 7 outputs only, mapping each requirement area to evidence or "not run". Record the source and date of the shipped Git host keys. Update `docs/roadmap.md` with S05 status. Add no claim that was not observed.
   - _Requirements: 19.2, 19.4_
 
