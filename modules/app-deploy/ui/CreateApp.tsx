@@ -38,7 +38,7 @@ function suggestSlug(name: string): string {
 const SLUG_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 
 /**
- * The server host as dashed IPv4 (`13-212-110-150`) when it is a public IPv4
+ * The server host as dashed IPv4 (`203-0-113-10`) when it is a public IPv4
  * address, else null. sslip.io maps `<anything>.<a-b-c-d>.sslip.io` to that
  * address, so it only works for an IP that is reachable from the internet.
  */
@@ -61,7 +61,7 @@ function publicIpv4Dashed(host: string): string | null {
   return isPrivate ? null : o.join("-");
 }
 
-/** A free public test name for the app, for example `shop.13-212-110-150.sslip.io`. */
+/** A free public test name for the app, for example `shop.203-0-113-10.sslip.io`. */
 export function testAddress(slug: string, host: string): string | null {
   const ip = publicIpv4Dashed(host);
   return ip && slug ? `${slug}.${ip}.sslip.io` : null;
