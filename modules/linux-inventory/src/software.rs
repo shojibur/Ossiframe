@@ -115,7 +115,7 @@ fn parse_line(line: &str) -> Line {
     let [name, version, status] = fields[..] else {
         return Line::Garbage;
     };
-    let (Some(name), Some(version)) = (clean_field(name), clean_field(version)) else {
+    let Some(name) = clean_field(name) else {
         return Line::Garbage;
     };
     // `${db:Status-Abbrev}` is three characters (want, status, error flag),
@@ -125,8 +125,13 @@ fn parse_line(line: &str) -> Line {
         return Line::Garbage;
     }
     if status.trim_end() != "ii" {
+        // Packages dpkg remembers but are not installed ("un", "pn", for
+        // example after a purge) have an empty version. They are well-formed.
         return Line::Ignored;
     }
+    let Some(version) = clean_field(version) else {
+        return Line::Garbage;
+    };
     if !is_wanted(&name) {
         return Line::Ignored;
     }
@@ -290,6 +295,20 @@ mod tests {
         assert_eq!(names(&p), ["nginx", "redis-server"]);
         assert_eq!(p.packages[0].version, "1.24.0-2ubuntu7");
         assert_eq!((p.truncated, p.skipped), (false, 0));
+    }
+
+    #[test]
+    fn not_installed_entries_without_a_version_are_ignored_not_garbage() {
+        // dpkg keeps entries for purged or never-installed packages; their
+        // version is empty.
+        let out = "nginx\t1.24.0-2ubuntu7\tii \n\
+                   apache2\t\tun \n\
+                   mariadb-server\t\tpn \n";
+        let p = parse(out);
+        assert_eq!(names(&p), ["nginx"]);
+        assert_eq!((p.truncated, p.skipped), (false, 0));
+        // An installed package still needs a version.
+        assert_eq!(parse("nginx\t\tii \n").skipped, 1);
     }
 
     #[test]

@@ -36,8 +36,8 @@ Source: `docs/verification/s03-ossiframe-doctor.md`.
 
 Source: `docs/verification/s04-infrastructure-provisioning.md`.
 
-- One full install succeeded on a fresh Ubuntu 24.04 server with every component verified. Not run yet:
-  - the fix for a provisioned server blocking its own preflight (`d937118`);
+- One full install succeeded on a fresh Ubuntu 24.04 server with every component verified, and a later preflight confirmed that a provisioned server no longer blocks itself on its own listeners (`d937118`). Not run yet:
+  - the fix for the "package list is incomplete" preflight blocker;
   - a verify-only re-run on an already provisioned server;
   - rejection after a server change, after plan expiry, and after a changed digest;
   - a second plan or desktop seeing the server lock as busy;
@@ -49,9 +49,10 @@ Source: `docs/verification/s04-infrastructure-provisioning.md`.
 
 ### Application deployment (S05)
 
-Source: `.kiro/specs/05-application-deployment/`. No S05 operation has run on a real server yet, so everything in S05 is unverified live, including:
+Source: `docs/verification/s05-application-deployment.md`. One static app was created and deployed on a real server with both health checks passing. Not verified yet:
 
-- Static, PHP and Laravel app creation and deployment.
+- Opening a deployed site from a browser.
+- PHP and Laravel app creation and deployment, and the database.
 - Private repositories with a deploy key, and pinned Git host keys.
 - The boot check, the release switch, rollback and removal.
 - The HTTP health check and its `X-Ossiframe-App` header.
@@ -72,6 +73,7 @@ Source: S05 `tasks.md` notes and `design.md`.
 
 - App types: Laravel, generic PHP and static HTML. WordPress, Node.js, Python and Docker are not supported.
 - No TLS or Let's Encrypt; sites are served over HTTP only.
+- The "Use a test address" button fills in `<slug>.<server-ip>.sslip.io`, which depends on the free third-party sslip.io DNS service. It appears only when the server's host is a public IPv4 address. Anyone who knows the address can open the site.
 - No queue workers and no scheduler.
 - No user-defined deploy steps.
 - No database password rotation.
